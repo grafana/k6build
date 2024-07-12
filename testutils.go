@@ -37,7 +37,7 @@ func SetupTestLocalBuildService(config LocalBuildServiceConfig) (BuildService, e
 		{
 			path:    "go.k6.io/k6ext",
 			version: "v0.2.0",
-			source:  filepath.Join("testdata", "deps" , "k6ext"),
+			source:  filepath.Join("testdata", "deps", "k6ext"),
 		},
 		{
 			path:    "go.k6.io/k6ext2",

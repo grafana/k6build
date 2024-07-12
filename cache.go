@@ -69,8 +69,8 @@ func (f *FileCache) Store(_ context.Context, id string, content io.Reader) (Obje
 		return Object{}, fmt.Errorf("%w id cannot be empty", ErrCreatingObject)
 	}
 
-	if strings.Contains(id, "/") {
-		return Object{}, fmt.Errorf("%w id cannot contain '/'", ErrCreatingObject)
+	if strings.Contains(id, string(os.PathSeparator)) {
+		return Object{}, fmt.Errorf("%w id cannot contain %q", ErrCreatingObject, string(os.PathSeparator))
 	}
 
 	objectDir := filepath.Join(f.dir, id)

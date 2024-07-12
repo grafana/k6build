@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -42,7 +43,7 @@ func TestAPIServer(t *testing.T) {
 			buildsrv, err := SetupTestLocalBuildService(
 				LocalBuildServiceConfig{
 					CacheDir: t.TempDir(),
-					Catalog:  "testdata/catalog.json",
+					Catalog:  filepath.Join("testdata", "catalog.json"),
 				},
 			)
 			if err != nil {

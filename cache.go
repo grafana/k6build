@@ -102,14 +102,10 @@ func (f *FileCache) Store(_ context.Context, id string, content io.Reader) (Obje
 		return Object{}, fmt.Errorf("%w: %w", ErrCreatingObject, err)
 	}
 
-	fileURL := url.URL{
-		Scheme: "file",
-		Path:   objectFile.Name(),
-	}
 	return Object{
 		ID:       id,
 		Checksum: checksum,
-		URL:      fileURL.String(),
+		URL:      fmt.Sprintf("file://%s", objectFile.Name()),
 	}, nil
 }
 
@@ -131,15 +127,10 @@ func (f *FileCache) Get(_ context.Context, id string) (Object, error) {
 		return Object{}, fmt.Errorf("%w: %w", ErrAccessingObject, err)
 	}
 
-	fileURL := url.URL{
-		Scheme: "file",
-		Path:   filepath.Join(objectDir, "data"),
-	}
-
 	return Object{
 		ID:       id,
 		Checksum: string(checksum),
-		URL:      fileURL.String(),
+		URL:      fmt.Sprintf("file://%s", filepath.Join(objectDir, "data")),
 	}, nil
 }
 

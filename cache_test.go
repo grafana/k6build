@@ -31,7 +31,7 @@ func setupCache(path string, preload []object) (Cache, error) {
 	return cache, nil
 }
 
-func TestFileCahceStoreObject(t *testing.T) {
+func TestFileCacheStoreObject(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -198,7 +198,7 @@ func TestFileCacheRetrieval(t *testing.T) {
 				title: "download existing object",
 				object: Object{
 					ID:  "object",
-					URL: fmt.Sprintf("file://%s/object/data", cacheDir),
+					URL: fmt.Sprintf("file:///%s/object/data", cacheDir),
 				},
 				expected:  []byte("content"),
 				expectErr: nil,
@@ -207,7 +207,7 @@ func TestFileCacheRetrieval(t *testing.T) {
 				title: "download non existing object",
 				object: Object{
 					ID:  "object",
-					URL: fmt.Sprintf("file://%s/another_object/data", cacheDir),
+					URL: fmt.Sprintf("file:///%s/another_object/data", cacheDir),
 				},
 				expectErr: ErrObjectNotFound,
 			},
@@ -215,7 +215,7 @@ func TestFileCacheRetrieval(t *testing.T) {
 				title: "download malformed url",
 				object: Object{
 					ID:  "object",
-					URL: fmt.Sprintf("file://%s/invalid&path/data", cacheDir),
+					URL: fmt.Sprintf("file:///%s/invalid&path/data", cacheDir),
 				},
 				// FIXME: this should be an ErrInvalidURL
 				expectErr: ErrObjectNotFound,
@@ -224,7 +224,7 @@ func TestFileCacheRetrieval(t *testing.T) {
 				title: "download malicious url",
 				object: Object{
 					ID:  "object",
-					URL: fmt.Sprintf("file://%s/../../data", cacheDir),
+					URL: fmt.Sprintf("file:///%s/../../data", cacheDir),
 				},
 				expectErr: ErrInvalidURL,
 			},

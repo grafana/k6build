@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http/httptest"
+	"path/filepath"
 
 	"github.com/grafana/k6catalog"
 	"github.com/grafana/k6foundry"
@@ -21,27 +22,27 @@ func SetupTestLocalBuildService(config LocalBuildServiceConfig) (BuildService, e
 		{
 			path:    "go.k6.io/k6",
 			version: "v0.1.0",
-			source:  "testdata/deps/k6",
+			source:  filepath.Join("testdata", "deps", "k6"),
 		},
 		{
 			path:    "go.k6.io/k6",
 			version: "v0.2.0",
-			source:  "testdata/deps/k6",
+			source:  filepath.Join("testdata", "deps", "k6"),
 		},
 		{
 			path:    "go.k6.io/k6ext",
 			version: "v0.1.0",
-			source:  "testdata/deps/k6ext",
+			source:  filepath.Join("testdata", "deps", "k6ext"),
 		},
 		{
 			path:    "go.k6.io/k6ext",
 			version: "v0.2.0",
-			source:  "testdata/deps/k6ext",
+			source:  filepath.Join("testdata", "deps" , "k6ext"),
 		},
 		{
 			path:    "go.k6.io/k6ext2",
 			version: "v0.1.0",
-			source:  "testdata/deps/k6ext2",
+			source:  filepath.Join("testdata", "deps", "k6ext2"),
 		},
 	}
 

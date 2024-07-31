@@ -6,7 +6,7 @@ require (
 	github.com/grafana/clireadme v0.1.0
 	github.com/grafana/k6catalog v0.1.0
 	github.com/grafana/k6foundry v0.2.0
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 )
 
 require (

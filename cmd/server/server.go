@@ -15,6 +15,8 @@ import (
 	"github.com/grafana/k6build/pkg/store/client"
 	"github.com/grafana/k6build/pkg/store/s3"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/spf13/cobra"
 )
 
@@ -175,6 +177,9 @@ func New() *cobra.Command { //nolint:funlen
 
 			srv := http.NewServeMux()
 			srv.Handle("POST /build", http.StripPrefix("/build", buildAPI))
+
+			// serve metrics
+			srv.Handle("/metrics", promhttp.Handler())
 
 			listerAddr := fmt.Sprintf("0.0.0.0:%d", port)
 			log.Info("starting server", "address", listerAddr)

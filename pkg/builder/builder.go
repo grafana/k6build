@@ -31,6 +31,16 @@ const (
 	metricsNamespace = "k6build"
 )
 
+// FIXME: this is a temporary solution to avoid a problem re-registering the metrics
+// when running tests
+func init() {
+	var err error
+	buildMetrics, err = newMetrics()
+	if err != nil {
+		panic(fmt.Sprintf("error creating metrics: %v", err))
+	}
+}
+
 var (
 	ErrAccessingArtifact     = errors.New("accessing artifact")                      //nolint:revive
 	ErrBuildingArtifact      = errors.New("building artifact")                       //nolint:revive
@@ -39,6 +49,8 @@ var (
 	ErrBuildSemverNotAllowed = errors.New("semvers with build metadata not allowed") //nolint:revive
 
 	constrainRe = regexp.MustCompile(opRe + verRe + buildRe)
+
+	buildMetrics *metrics //nolint:gochecknoglobals
 )
 
 // GoOpts defines the options for the go build environment
@@ -146,16 +158,11 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("store cannot be nil"))
 	}
 
-	metrics, err := newMetrics()
-	if err != nil {
-		return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
-	}
-
 	return &Builder{
 		catalog: config.Catalog,
 		opts:    config.Opts,
 		store:   config.Store,
-		metrics: metrics,
+		metrics: buildMetrics,
 	}, nil
 }
 

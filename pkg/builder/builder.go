@@ -16,6 +16,8 @@ import (
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6foundry"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -25,6 +27,8 @@ const (
 	opRe    = `(?<operator>[=|~|>|<|\^|>=|<=|!=]){0,1}(?:\s*)`
 	verRe   = `(?P<version>[v|V](?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))`
 	buildRe = `(?:[+|-|])(?P<build>(?:[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))`
+
+	metricsNamespace = "k6build"
 )
 
 var (
@@ -57,6 +61,72 @@ type Config struct {
 	Store   store.ObjectStore
 }
 
+type metrics struct {
+	requestCounter      prometheus.Counter
+	buildCounter        prometheus.Counter
+	storeHitsCounter    prometheus.Counter
+	buildsFailedCounter prometheus.Counter
+	buildTimeHistogram  prometheus.Histogram
+}
+
+func newMetrics() (*metrics, error) {
+	requestCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "request_total",
+		Help:      "The total number of builds requests",
+	})
+
+	if err := prometheus.Register(requestCounter); err != nil {
+		return nil, err
+	}
+
+	buildCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "builds_total",
+		Help:      "The total number of builds",
+	})
+	if err := prometheus.Register(buildCounter); err != nil {
+		return nil, err
+	}
+
+	buildsFailedCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "builds_failed_total",
+		Help:      "The total number of builds",
+	})
+
+	if err := prometheus.Register(buildsFailedCounter); err != nil {
+		return nil, err
+	}
+
+	storeHitsCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "object_store_hits_total",
+		Help:      "The total number of object store hits",
+	})
+	if err := prometheus.Register(storeHitsCounter); err != nil {
+		return nil, err
+	}
+
+	buildTimeHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: metricsNamespace,
+		Name:      "build_duration_seconds",
+		Help:      "The duration of the build in seconds",
+		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300},
+	})
+	if err := prometheus.Register(buildTimeHistogram); err != nil {
+		return nil, err
+	}
+
+	return &metrics{
+		requestCounter:      requestCounter,
+		buildCounter:        buildCounter,
+		buildsFailedCounter: buildsFailedCounter,
+		storeHitsCounter:    storeHitsCounter,
+		buildTimeHistogram:  buildTimeHistogram,
+	}, nil
+}
+
 // Builder implements the BuildService interface
 type Builder struct {
 	allowBuildSemvers bool
@@ -64,6 +134,7 @@ type Builder struct {
 	builder           k6foundry.Builder
 	store             store.ObjectStore
 	mutexes           sync.Map
+	metrics           *metrics
 }
 
 // New returns a new instance of Builder given a BuilderConfig
@@ -92,11 +163,17 @@ func New(ctx context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
 	}
 
+	metrics, err := newMetrics()
+	if err != nil {
+		return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
+	}
+
 	return &Builder{
 		allowBuildSemvers: config.Opts.AllowBuildSemvers,
 		catalog:           config.Catalog,
 		builder:           builder,
 		store:             config.Store,
+		metrics:           metrics,
 	}, nil
 }
 
@@ -107,6 +184,8 @@ func (b *Builder) Build( //nolint:funlen
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (k6build.Artifact, error) {
+	b.metrics.requestCounter.Inc()
+
 	buildPlatform, err := k6foundry.ParsePlatform(platform)
 	if err != nil {
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrInvalidParameters, err)
@@ -163,6 +242,8 @@ func (b *Builder) Build( //nolint:funlen
 
 	artifactObject, err := b.store.Get(ctx, id)
 	if err == nil {
+		b.metrics.storeHitsCounter.Inc()
+
 		return k6build.Artifact{
 			ID:           id,
 			Checksum:     artifactObject.Checksum,
@@ -176,11 +257,17 @@ func (b *Builder) Build( //nolint:funlen
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
 	}
 
+	b.metrics.buildCounter.Inc()
+	buildTimer := prometheus.NewTimer(b.metrics.buildTimeHistogram)
+
 	artifactBuffer := &bytes.Buffer{}
 	buildInfo, err := b.builder.Build(ctx, buildPlatform, k6Mod.Version, mods, []string{}, artifactBuffer)
 	if err != nil {
+		b.metrics.buildsFailedCounter.Inc()
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
 	}
+
+	buildTimer.ObserveDuration()
 
 	// if the version has a build metadata, we must use the actual version built
 	// TODO: check this version is supported

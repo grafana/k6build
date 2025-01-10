@@ -25,6 +25,16 @@ See [k6catalog](http://github.com/grafana/k6catalog) for more details on definin
 
 The default catalog is defined at https://registry.k6.io/catalog.json
 
+## Metrics
+
+The k6build's [builder](pkg/builder/builder.go) collects metrics about the build process in a prometheus compatible format:
+* Number of build requests
+* Number of build requests satisfied from the object store
+* Number of builds
+* Build time histogram
+* Number of failed build processes
+
+The k6build [server](cmd/server/server.go) exposes these metrics in the `/metrics` path.
 
 ## Usage scenarios
 

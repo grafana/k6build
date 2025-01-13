@@ -27,19 +27,7 @@ const (
 	opRe    = `(?<operator>[=|~|>|<|\^|>=|<=|!=]){0,1}(?:\s*)`
 	verRe   = `(?P<version>[v|V](?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))`
 	buildRe = `(?:[+|-|])(?P<build>(?:[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))`
-
-	metricsNamespace = "k6build"
 )
-
-// FIXME: this is a temporary solution to avoid a problem re-registering the metrics
-// when running tests
-func init() {
-	var err error
-	buildMetrics, err = newMetrics()
-	if err != nil {
-		panic(fmt.Sprintf("error creating metrics: %v", err))
-	}
-}
 
 var (
 	ErrAccessingArtifact     = errors.New("accessing artifact")                      //nolint:revive
@@ -49,8 +37,6 @@ var (
 	ErrBuildSemverNotAllowed = errors.New("semvers with build metadata not allowed") //nolint:revive
 
 	constrainRe = regexp.MustCompile(opRe + verRe + buildRe)
-
-	buildMetrics *metrics //nolint:gochecknoglobals
 )
 
 // GoOpts defines the options for the go build environment
@@ -68,87 +54,10 @@ type Opts struct {
 
 // Config defines the configuration for a Builder
 type Config struct {
-	Opts    Opts
-	Catalog catalog.Catalog
-	Store   store.ObjectStore
-}
-
-type metrics struct {
-	requestCounter       prometheus.Counter
-	buildCounter         prometheus.Counter
-	storeHitsCounter     prometheus.Counter
-	buildsFailedCounter  prometheus.Counter
-	buildsInvalidCounter prometheus.Counter
-	buildTimeHistogram   prometheus.Histogram
-}
-
-func newMetrics() (*metrics, error) {
-	requestCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metricsNamespace,
-		Name:      "request_total",
-		Help:      "The total number of builds requests",
-	})
-
-	if err := prometheus.Register(requestCounter); err != nil {
-		return nil, err
-	}
-
-	buildCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metricsNamespace,
-		Name:      "builds_total",
-		Help:      "The total number of builds",
-	})
-	if err := prometheus.Register(buildCounter); err != nil {
-		return nil, err
-	}
-
-	buildsFailedCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metricsNamespace,
-		Name:      "builds_failed_total",
-		Help:      "The total number of failed builds",
-	})
-
-	if err := prometheus.Register(buildsFailedCounter); err != nil {
-		return nil, err
-	}
-
-	buildsInvalidCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metricsNamespace,
-		Name:      "builds_invalid_total",
-		Help:      "The total number of builds with invalid parameters",
-	})
-
-	if err := prometheus.Register(buildsInvalidCounter); err != nil {
-		return nil, err
-	}
-
-	storeHitsCounter := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metricsNamespace,
-		Name:      "object_store_hits_total",
-		Help:      "The total number of object store hits",
-	})
-	if err := prometheus.Register(storeHitsCounter); err != nil {
-		return nil, err
-	}
-
-	buildTimeHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Namespace: metricsNamespace,
-		Name:      "build_duration_seconds",
-		Help:      "The duration of the build in seconds",
-		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300},
-	})
-	if err := prometheus.Register(buildTimeHistogram); err != nil {
-		return nil, err
-	}
-
-	return &metrics{
-		requestCounter:       requestCounter,
-		buildCounter:         buildCounter,
-		buildsFailedCounter:  buildsFailedCounter,
-		buildsInvalidCounter: buildsInvalidCounter,
-		storeHitsCounter:     storeHitsCounter,
-		buildTimeHistogram:   buildTimeHistogram,
-	}, nil
+	Opts       Opts
+	Catalog    catalog.Catalog
+	Store      store.ObjectStore
+	Registerer prometheus.Registerer
 }
 
 // Builder implements the BuildService interface
@@ -170,11 +79,19 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("store cannot be nil"))
 	}
 
+	metrics := newMetrics()
+	if config.Registerer != nil {
+		err := metrics.register(config.Registerer)
+		if err != nil {
+			return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
+		}
+	}
+
 	return &Builder{
 		catalog: config.Catalog,
 		opts:    config.Opts,
 		store:   config.Store,
-		metrics: buildMetrics,
+		metrics: metrics,
 	}, nil
 }
 

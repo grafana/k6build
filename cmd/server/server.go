@@ -15,6 +15,9 @@ import (
 	"github.com/grafana/k6build/pkg/store/client"
 	"github.com/grafana/k6build/pkg/store/s3"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/spf13/cobra"
 )
 
@@ -160,8 +163,9 @@ func New() *cobra.Command { //nolint:funlen
 					Verbose:           verbose,
 					AllowBuildSemvers: allowBuildSemvers,
 				},
-				Catalog: catalog,
-				Store:   store,
+				Catalog:    catalog,
+				Store:      store,
+				Registerer: prometheus.DefaultRegisterer,
 			}
 			buildSrv, err := builder.New(cmd.Context(), config)
 			if err != nil {
@@ -175,6 +179,10 @@ func New() *cobra.Command { //nolint:funlen
 			buildAPI := server.NewAPIServer(apiConfig)
 
 			srv := http.NewServeMux()
+			// server metrics
+			srv.Handle("/metrics", promhttp.Handler())
+
+			// handle build requests
 			srv.Handle("POST /build/", http.StripPrefix("/build", buildAPI))
 
 			listerAddr := fmt.Sprintf("0.0.0.0:%d", port)

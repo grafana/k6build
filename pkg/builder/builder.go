@@ -74,11 +74,12 @@ type Config struct {
 }
 
 type metrics struct {
-	requestCounter      prometheus.Counter
-	buildCounter        prometheus.Counter
-	storeHitsCounter    prometheus.Counter
-	buildsFailedCounter prometheus.Counter
-	buildTimeHistogram  prometheus.Histogram
+	requestCounter       prometheus.Counter
+	buildCounter         prometheus.Counter
+	storeHitsCounter     prometheus.Counter
+	buildsFailedCounter  prometheus.Counter
+	buildsInvalidCounter prometheus.Counter
+	buildTimeHistogram   prometheus.Histogram
 }
 
 func newMetrics() (*metrics, error) {
@@ -104,10 +105,20 @@ func newMetrics() (*metrics, error) {
 	buildsFailedCounter := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metricsNamespace,
 		Name:      "builds_failed_total",
-		Help:      "The total number of builds",
+		Help:      "The total number of failed builds",
 	})
 
 	if err := prometheus.Register(buildsFailedCounter); err != nil {
+		return nil, err
+	}
+
+	buildsInvalidCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "builds_invalid_total",
+		Help:      "The total number of builds with invalid parameters",
+	})
+
+	if err := prometheus.Register(buildsInvalidCounter); err != nil {
 		return nil, err
 	}
 
@@ -131,11 +142,12 @@ func newMetrics() (*metrics, error) {
 	}
 
 	return &metrics{
-		requestCounter:      requestCounter,
-		buildCounter:        buildCounter,
-		buildsFailedCounter: buildsFailedCounter,
-		storeHitsCounter:    storeHitsCounter,
-		buildTimeHistogram:  buildTimeHistogram,
+		requestCounter:       requestCounter,
+		buildCounter:         buildCounter,
+		buildsFailedCounter:  buildsFailedCounter,
+		buildsInvalidCounter: buildsInvalidCounter,
+		storeHitsCounter:     storeHitsCounter,
+		buildTimeHistogram:   buildTimeHistogram,
 	}, nil
 }
 
@@ -172,7 +184,15 @@ func (b *Builder) Build( //nolint:funlen
 	platform string,
 	k6Constrains string,
 	deps []k6build.Dependency,
-) (k6build.Artifact, error) {
+) (artifact k6build.Artifact, buildErr error) {
+	// FIXME: this is a temporary solution because the logic has many paths that return
+	// an invalid parameters error and we need to increment the metrics in all of them
+	defer func() {
+		if errors.Is(buildErr, ErrInvalidParameters) {
+			b.metrics.buildsInvalidCounter.Inc()
+		}
+	}()
+
 	b.metrics.requestCounter.Inc()
 
 	buildPlatform, err := k6foundry.ParsePlatform(platform)

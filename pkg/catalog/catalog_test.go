@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-const (
-	testCatalog    = `{ "dep": {"Module": "github.com/dep", "Versions": ["v0.1.0", "v0.2.0"]}}`
-	invalidCatalog = `{ "dep": {}}`
-)
+const testCatalog = `{
+"dep": {"Module": "github.com/dep", "Versions": ["v0.1.0", "v0.2.0"]},
+"dep2": {"Module": "github.com/dep2", "Versions": ["v0.1.0"], "Cgo": true}
+}`
 
 func TestResolve(t *testing.T) {
 	t.Parallel()
@@ -28,17 +28,22 @@ func TestResolve(t *testing.T) {
 		{
 			title:  "resolve exact version",
 			dep:    Dependency{Name: "dep", Constrains: "v0.1.0"},
-			expect: Module{Path: "github.com/dep", Version: "v0.1.0"},
+			expect: Module{Path: "github.com/dep", Version: "v0.1.0", Cgo: false},
 		},
 		{
 			title:  "resolve > constrain",
 			dep:    Dependency{Name: "dep", Constrains: ">v0.1.0"},
-			expect: Module{Path: "github.com/dep", Version: "v0.2.0"},
+			expect: Module{Path: "github.com/dep", Version: "v0.2.0", Cgo: false},
 		},
 		{
 			title:  "resolve latest version",
 			dep:    Dependency{Name: "dep", Constrains: "*"},
-			expect: Module{Path: "github.com/dep", Version: "v0.2.0"},
+			expect: Module{Path: "github.com/dep", Version: "v0.2.0", Cgo: false},
+		},
+		{
+			title:  "resolve cgo dependency",
+			dep:    Dependency{Name: "dep2", Constrains: "=v0.1.0"},
+			expect: Module{Path: "github.com/dep2", Version: "v0.1.0", Cgo: true},
 		},
 		{
 			title:     "unsatisfied > constrain",

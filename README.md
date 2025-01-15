@@ -229,9 +229,8 @@ For example
 	  }
 	}
 
-Note: The build server does not support CGO_ENABLE when building binaries
-      due to this issue: https://github.com/grafana/k6build/issues/37
-      use --enable-cgo=true to enable CGO support
+Note: The build server disables CGO by default but enables it when a dependency requires it.
+      use --enable-cgo=true to enable CGO support by default.
 
 
 ```

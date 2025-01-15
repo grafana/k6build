@@ -7,21 +7,27 @@
 //
 // The catalog is a json file with the following schema:
 //
-//	{
-//	     "<dependency>": {"module": "<go module path>", "versions": ["<version>", "<version>", ... "<version>"]}
-//	}
+//		{
+//		     "<dependency>": {
+//	              "module": "<module path>",
+//	              "versions": ["<version>", "<version>", ... "<version>"],
+//	              "cgo": <bool>
+//		     },
+//		}
 //
 // where:
 // <dependency>: is the import path for the dependency
 // module: is the path to the go module that implements the dependency
 // versions: is the list of supported versions
+// cgo: is a boolean that indicates if the module requires cgo
 //
 // Example:
 //
 //	{
 //	     "k6": {"module": "go.k6.io/k6", "versions": ["v0.50.0", "v0.51.0"]},
 //	     "k6/x/kubernetes": {"module": "github.com/grafana/xk6-kubernetes", "versions": ["v0.8.0","v0.9.0"]},
-//	     "k6/x/output-kafka": {"module": "github.com/grafana/xk6-output-kafka", "versions": ["v0.7.0"]}
+//	     "k6/x/output-kafka": {"module": "github.com/grafana/xk6-output-kafka", "versions": ["v0.7.0"]},
+//	     "k6/x/xk6-sql-driver-sqlite3": {"module": "github.com/grafana/xk6-sql", "cgo": true, "versions": ["v0.1.0"]}
 //	}
 package catalog
 
@@ -68,6 +74,7 @@ type Dependency struct {
 type Module struct {
 	Path    string `json:"path,omitempty"`
 	Version string `json:"version,omitempty"`
+	Cgo     bool   `json:"cgo,omitempty"`
 }
 
 // Catalog defines the interface of the extension catalog service
@@ -80,6 +87,7 @@ type Catalog interface {
 type entry struct {
 	Module   string   `json:"module,omitempty"`
 	Versions []string `json:"versions,omitempty"`
+	Cgo      bool     `json:"cgo,omitempty"`
 }
 
 type catalog struct {
@@ -191,7 +199,7 @@ func (c catalog) Resolve(ctx context.Context, dep Dependency) (Module, error) {
 		sort.Sort(sort.Reverse(semver.Collection(versions)))
 		for _, v := range versions {
 			if constrain.Check(v) {
-				return Module{Path: entry.Module, Version: v.Original()}, nil
+				return Module{Path: entry.Module, Version: v.Original(), Cgo: entry.Cgo}, nil
 			}
 		}
 	}

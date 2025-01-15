@@ -17,7 +17,12 @@
                                         "type": "string",
                                         "pattern": "^v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)$"
                                 }
+                        },
+                        "cgo": {
+                                "type": "boolean",
+                                "description": "whether the dependency requires cgo"
                         }
+
                 },
                 "required": [
                         "module",

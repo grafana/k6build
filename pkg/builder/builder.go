@@ -59,15 +59,14 @@ type Config struct {
 
 // Builder implements the BuildService interface
 type Builder struct {
-	allowBuildSemvers bool
-	catalog           catalog.Catalog
-	builder           k6foundry.Builder
-	store             store.ObjectStore
-	mutexes           sync.Map
+	opts    Opts
+	catalog catalog.Catalog
+	store   store.ObjectStore
+	mutexes sync.Map
 }
 
 // New returns a new instance of Builder given a BuilderConfig
-func New(ctx context.Context, config Config) (*Builder, error) {
+func New(_ context.Context, config Config) (*Builder, error) {
 	if config.Catalog == nil {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("catalog cannot be nil"))
 	}
@@ -76,27 +75,10 @@ func New(ctx context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("store cannot be nil"))
 	}
 
-	builderOpts := k6foundry.NativeBuilderOpts{
-		GoOpts: k6foundry.GoOpts{
-			Env:       config.Opts.Env,
-			CopyGoEnv: config.Opts.CopyGoEnv,
-		},
-	}
-	if config.Opts.Verbose {
-		builderOpts.Stdout = os.Stdout
-		builderOpts.Stderr = os.Stderr
-	}
-
-	builder, err := k6foundry.NewNativeBuilder(ctx, builderOpts)
-	if err != nil {
-		return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
-	}
-
 	return &Builder{
-		allowBuildSemvers: config.Opts.AllowBuildSemvers,
-		catalog:           config.Catalog,
-		builder:           builder,
-		store:             config.Store,
+		catalog: config.Catalog,
+		opts:    config.Opts,
+		store:   config.Store,
 	}, nil
 }
 
@@ -127,7 +109,7 @@ func (b *Builder) Build( //nolint:funlen
 		return k6build.Artifact{}, err
 	}
 	if buildMetadata != "" {
-		if !b.allowBuildSemvers {
+		if !b.opts.AllowBuildSemvers {
 			return k6build.Artifact{}, k6build.NewWrappedError(ErrInvalidParameters, ErrBuildSemverNotAllowed)
 		}
 		k6Mod = catalog.Module{Path: k6Path, Version: buildMetadata}
@@ -140,6 +122,7 @@ func (b *Builder) Build( //nolint:funlen
 	resolved[k6Dep] = k6Mod.Version
 
 	mods := []k6foundry.Module{}
+	cgoEnabled := false
 	for _, d := range deps {
 		m, modErr := b.catalog.Resolve(ctx, catalog.Dependency{Name: d.Name, Constrains: d.Constraints})
 		if modErr != nil {
@@ -147,6 +130,7 @@ func (b *Builder) Build( //nolint:funlen
 		}
 		mods = append(mods, k6foundry.Module{Path: m.Path, Version: m.Version})
 		resolved[d.Name] = m.Version
+		cgoEnabled = cgoEnabled || m.Cgo
 	}
 
 	// generate id form sorted list of dependencies
@@ -176,8 +160,33 @@ func (b *Builder) Build( //nolint:funlen
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
 	}
 
+	// set CGO_ENABLED if any of the dependencies require it
+	env := b.opts.Env
+	if cgoEnabled {
+		if env == nil {
+			env = map[string]string{}
+		}
+		env["CGO_ENABLED"] = "1"
+	}
+
+	builderOpts := k6foundry.NativeBuilderOpts{
+		GoOpts: k6foundry.GoOpts{
+			Env:       env,
+			CopyGoEnv: b.opts.CopyGoEnv,
+		},
+	}
+	if b.opts.Verbose {
+		builderOpts.Stdout = os.Stdout
+		builderOpts.Stderr = os.Stderr
+	}
+
+	builder, err := k6foundry.NewNativeBuilder(ctx, builderOpts)
+	if err != nil {
+		return k6build.Artifact{}, k6build.NewWrappedError(ErrInitializingBuilder, err)
+	}
+
 	artifactBuffer := &bytes.Buffer{}
-	buildInfo, err := b.builder.Build(ctx, buildPlatform, k6Mod.Version, mods, []string{}, artifactBuffer)
+	buildInfo, err := builder.Build(ctx, buildPlatform, k6Mod.Version, mods, []string{}, artifactBuffer)
 	if err != nil {
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
 	}
@@ -205,7 +214,7 @@ func (b *Builder) Build( //nolint:funlen
 // lockArtifact obtains a mutex used to prevent concurrent builds of the same artifact and
 // returns a function that will unlock the mutex associated to the given id in the object store.
 // The lock is also removed from the map. Subsequent calls will get another lock on the same
-// id but this is safe as the object should already be in the object strore and no further
+// id but this is safe as the object should already be in the object store and no further
 // builds are needed.
 func (b *Builder) lockArtifact(id string) func() {
 	value, _ := b.mutexes.LoadOrStore(id, &sync.Mutex{})

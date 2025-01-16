@@ -16,6 +16,8 @@ import (
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6foundry"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -52,9 +54,10 @@ type Opts struct {
 
 // Config defines the configuration for a Builder
 type Config struct {
-	Opts    Opts
-	Catalog catalog.Catalog
-	Store   store.ObjectStore
+	Opts       Opts
+	Catalog    catalog.Catalog
+	Store      store.ObjectStore
+	Registerer prometheus.Registerer
 }
 
 // Builder implements the BuildService interface
@@ -63,6 +66,7 @@ type Builder struct {
 	catalog catalog.Catalog
 	store   store.ObjectStore
 	mutexes sync.Map
+	metrics *metrics
 }
 
 // New returns a new instance of Builder given a BuilderConfig
@@ -75,10 +79,19 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("store cannot be nil"))
 	}
 
+	metrics := newMetrics()
+	if config.Registerer != nil {
+		err := metrics.register(config.Registerer)
+		if err != nil {
+			return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
+		}
+	}
+
 	return &Builder{
 		catalog: config.Catalog,
 		opts:    config.Opts,
 		store:   config.Store,
+		metrics: metrics,
 	}, nil
 }
 
@@ -88,7 +101,17 @@ func (b *Builder) Build( //nolint:funlen
 	platform string,
 	k6Constrains string,
 	deps []k6build.Dependency,
-) (k6build.Artifact, error) {
+) (artifact k6build.Artifact, buildErr error) {
+	// FIXME: this is a temporary solution because the logic has many paths that return
+	// an invalid parameters error and we need to increment the metrics in all of them
+	defer func() {
+		if errors.Is(buildErr, ErrInvalidParameters) {
+			b.metrics.buildsInvalidCounter.Inc()
+		}
+	}()
+
+	b.metrics.requestCounter.Inc()
+
 	buildPlatform, err := k6foundry.ParsePlatform(platform)
 	if err != nil {
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrInvalidParameters, err)
@@ -147,6 +170,8 @@ func (b *Builder) Build( //nolint:funlen
 
 	artifactObject, err := b.store.Get(ctx, id)
 	if err == nil {
+		b.metrics.storeHitsCounter.Inc()
+
 		return k6build.Artifact{
 			ID:           id,
 			Checksum:     artifactObject.Checksum,
@@ -184,12 +209,17 @@ func (b *Builder) Build( //nolint:funlen
 	if err != nil {
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrInitializingBuilder, err)
 	}
+	b.metrics.buildCounter.Inc()
+	buildTimer := prometheus.NewTimer(b.metrics.buildTimeHistogram)
 
 	artifactBuffer := &bytes.Buffer{}
 	buildInfo, err := builder.Build(ctx, buildPlatform, k6Mod.Version, mods, []string{}, artifactBuffer)
 	if err != nil {
+		b.metrics.buildsFailedCounter.Inc()
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
 	}
+
+	buildTimer.ObserveDuration()
 
 	// if the version has a build metadata, we must use the actual version built
 	// TODO: check this version is supported

@@ -29,7 +29,7 @@ but does not return the binary itself.
 
 For example
 
-	curl http://localhost:8000/build/ -d \
+	curl http://localhost:8000/build -d \
 	'{
 	  "k6":"v0.50.0",
 	  "dependencies":[

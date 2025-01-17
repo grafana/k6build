@@ -29,7 +29,6 @@ func (f buildFunction) Build(
 	return f(ctx, platform, k6Constrains, deps)
 }
 
-//nolint:revive
 func buildOk(
 	ctx context.Context,
 	platform string,
@@ -41,7 +40,6 @@ func buildOk(
 	}, nil
 }
 
-//nolint:revive
 func buildErr(
 	ctx context.Context,
 	platform string,

@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http/httptest"
+	"io"
+	"strings"
 	"sync"
 	"testing"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/store/file"
 	"github.com/grafana/k6foundry"
-	"github.com/grafana/k6foundry/pkg/testutils/goproxy"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -21,52 +21,47 @@ import (
 // DependencyComp compares two dependencies for ordering
 func DependencyComp(a, b catalog.Module) bool { return a.Path < b.Path }
 
+type mockBuilder struct {
+	opts k6foundry.NativeBuilderOpts
+}
+
+// Mocks the Faundry's Build method
+// Returns the build info for the given platform, k6 version and modules
+func (m *mockBuilder) Build(
+	_ context.Context,
+	platform k6foundry.Platform,
+	k6Version string,
+	mods []k6foundry.Module,
+	buildOpts []string,
+	out io.Writer,
+) (*k6foundry.BuildInfo, error) {
+	modVersions := make(map[string]string)
+	for _, mod := range mods {
+		modVersions[mod.Path] = mod.Version
+	}
+	return &k6foundry.BuildInfo{
+		Platform:    platform.String(),
+		ModVersions: modVersions,
+	}, nil
+}
+
+func MockFoundryFactory(_ context.Context, opts k6foundry.NativeBuilderOpts) (k6foundry.Builder, error) {
+	return &mockBuilder{
+		opts: opts,
+	}, nil
+}
+
+const catalogJSON = `
+{
+"k6": {"module": "go.k6.io/k6", "versions": ["v0.1.0", "v0.2.0"]},
+"k6/x/ext": {"module": "go.k6.io/k6ext", "versions": ["v0.1.0", "v0.2.0"]},
+"k6/x/ext2": {"module": "go.k6.io/k6ext2", "versions": ["v0.1.0"]}
+}
+`
+
 // SetupTestBuilder setups a local build service for testing
 func SetupTestBuilder(t *testing.T) (*Builder, error) {
-	modules := []struct {
-		path    string
-		version string
-		source  string
-	}{
-		{
-			path:    "go.k6.io/k6",
-			version: "v0.1.0",
-			source:  "testdata/deps/k6",
-		},
-		{
-			path:    "go.k6.io/k6",
-			version: "v0.2.0",
-			source:  "testdata/deps/k6",
-		},
-		{
-			path:    "go.k6.io/k6ext",
-			version: "v0.1.0",
-			source:  "testdata/deps/k6ext",
-		},
-		{
-			path:    "go.k6.io/k6ext",
-			version: "v0.2.0",
-			source:  "testdata/deps/k6ext",
-		},
-		{
-			path:    "go.k6.io/k6ext2",
-			version: "v0.1.0",
-			source:  "testdata/deps/k6ext2",
-		},
-	}
-
-	// creates a goproxy that serves the given modules
-	proxy := goproxy.NewGoProxy()
-	for _, m := range modules {
-		err := proxy.AddModVersion(m.path, m.version, m.source)
-		if err != nil {
-			return nil, fmt.Errorf("setup %w", err)
-		}
-	}
-
-	goproxySrv := httptest.NewServer(proxy)
-
-	catalog, err := catalog.NewCatalogFromFile("testdata/catalog.json")
+	catalog, err := catalog.NewCatalogFromJSON(strings.NewReader(catalogJSON))
 	if err != nil {
 		return nil, fmt.Errorf("setting up test builder %w", err)
 	}
@@ -77,20 +72,10 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 	}
 
 	return New(context.Background(), Config{
-		Opts: Opts{
-			GoOpts: k6foundry.GoOpts{
-				CopyGoEnv: true,
-				Env: map[string]string{
-					"GOPROXY":   goproxySrv.URL,
-					"GONOPROXY": "none",
-					"GOPRIVATE": "go.k6.io",
-					"GONOSUMDB": "go.k6.io",
-				},
-				TmpCache: true,
-			},
-		},
+		Opts:    Opts{},
 		Catalog: catalog,
 		Store:   store,
+		Foundry: FoundryFunction(MockFoundryFactory),
 	})
 }
 
@@ -325,7 +310,7 @@ func TestIdempotentBuild(t *testing.T) {
 	})
 }
 
-// TestConcurrentBuilds tests that is sage to build the same artifact concurrently and that
+// TestConcurrentBuilds tests that is safe to build the same artifact concurrently and that
 // concurrent builds of different artifacts are not affected.
 // The test uses a local test setup backed by a file object store.
 // Attempting to write the same artifact twice will return an error.

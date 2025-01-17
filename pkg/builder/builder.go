@@ -40,6 +40,19 @@ var (
 // GoOpts defines the options for the go build environment
 type GoOpts = k6foundry.GoOpts
 
+// Foundry is a function that creates a Foundry Builder
+type Foundry interface {
+	NewBuilder(ctx context.Context, opts k6foundry.NativeBuilderOpts) (k6foundry.Builder, error)
+}
+
+// FoundryFunction defines a function that implements the Foundry interface
+type FoundryFunction func(context.Context, k6foundry.NativeBuilderOpts) (k6foundry.Builder, error)
+
+// NewBuilder implements the Foundry interface
+func (f FoundryFunction) NewBuilder(ctx context.Context, opts k6foundry.NativeBuilderOpts) (k6foundry.Builder, error) {
+	return f(ctx, opts)
+}
+
 // Opts defines the options for configuring the builder
 type Opts struct {
 	// Allow semvers with build metadata
@@ -55,6 +68,7 @@ type Config struct {
 	Opts    Opts
 	Catalog catalog.Catalog
 	Store   store.ObjectStore
+	Foundry Foundry
 }
 
 // Builder implements the BuildService interface
@@ -63,6 +77,7 @@ type Builder struct {
 	catalog catalog.Catalog
 	store   store.ObjectStore
 	mutexes sync.Map
+	foundry Foundry
 }
 
 // New returns a new instance of Builder given a BuilderConfig
@@ -75,10 +90,15 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("store cannot be nil"))
 	}
 
+	foundry := config.Foundry
+	if foundry == nil {
+		foundry = FoundryFunction(k6foundry.NewNativeBuilder)
+	}
 	return &Builder{
 		catalog: config.Catalog,
 		opts:    config.Opts,
 		store:   config.Store,
+		foundry: foundry,
 	}, nil
 }
 
@@ -180,7 +200,7 @@ func (b *Builder) Build( //nolint:funlen
 		builderOpts.Stderr = os.Stderr
 	}
 
-	builder, err := k6foundry.NewNativeBuilder(ctx, builderOpts)
+	builder, err := b.foundry.NewBuilder(ctx, builderOpts)
 	if err != nil {
 		return k6build.Artifact{}, k6build.NewWrappedError(ErrInitializingBuilder, err)
 	}

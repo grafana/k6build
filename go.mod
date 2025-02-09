@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.75.2
 	github.com/docker/go-connections v0.5.0
 	github.com/grafana/clireadme v0.1.0
-	github.com/grafana/k6foundry v0.4.0
+	github.com/grafana/k6foundry v0.4.2
 	github.com/spf13/cobra v1.8.1
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.35.0
 )

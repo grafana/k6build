@@ -11,7 +11,7 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/grafana/clireadme v0.1.0
 	github.com/grafana/k6foundry v0.4.4
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.9.1
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.35.0
 )
 
@@ -91,7 +91,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/prometheus/client_golang v1.20.5
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.6 // indirect
 	golang.org/x/mod v0.23.0 // indirect
 )
 

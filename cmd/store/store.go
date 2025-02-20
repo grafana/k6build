@@ -2,10 +2,14 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/store/file"
@@ -47,12 +51,13 @@ curl http://external.url:9000/store/objectID/download
 )
 
 // New creates new cobra command for store command.
-func New() *cobra.Command {
+func New() *cobra.Command { //nolint:funlen
 	var (
-		storeDir    string
-		storeSrvURL string
-		port        int
-		logLevel    string
+		storeDir        string
+		storeSrvURL     string
+		port            int
+		logLevel        string
+		shutdownTimeout time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -98,13 +103,44 @@ func New() *cobra.Command {
 			srv := http.NewServeMux()
 			srv.Handle("/store/", storeSrv)
 
-			listerAddr := fmt.Sprintf("0.0.0.0:%d", port)
-			log.Info("starting server", "address", listerAddr, "object store", storeDir)
-			err = http.ListenAndServe(listerAddr, srv) //nolint:gosec
-			if err != nil {
-				log.Info("server ended", "error", err.Error())
+			httpServer := &http.Server{
+				Addr:              fmt.Sprintf("0.0.0.0:%d", port),
+				Handler:           srv,
+				ReadHeaderTimeout: 5 * time.Second,
 			}
-			log.Info("ending server")
+
+			serverErrors := make(chan error, 1)
+
+			go func() {
+				log.Info("starting server", "address", httpServer.Addr, "object store", storeDir)
+				err := httpServer.ListenAndServe()
+				if err != nil && err != http.ErrServerClosed {
+					serverErrors <- err
+				}
+			}()
+
+			shutdown := make(chan os.Signal, 1)
+			signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+			select {
+			case err := <-serverErrors:
+				return fmt.Errorf("server error: %w", err)
+
+			case sig := <-shutdown:
+				log.Debug("shutdown started", "signal", sig)
+
+				ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+				defer cancel()
+
+				if err := httpServer.Shutdown(ctx); err != nil {
+					log.Error("graceful shutdown failed", "error", err)
+					if err := httpServer.Close(); err != nil {
+						return fmt.Errorf("could not stop server: %w", err)
+					}
+				}
+
+				log.Debug("shutdown completed")
+			}
 
 			return nil
 		},
@@ -117,6 +153,12 @@ func New() *cobra.Command {
 			"\nIf not specified http://localhost:<port> is used",
 	)
 	cmd.Flags().StringVarP(&logLevel, "log-level", "l", "INFO", "log level")
+	cmd.Flags().DurationVar(
+		&shutdownTimeout,
+		"shutdown-timeout",
+		10*time.Second,
+		"maximum time to wait for graceful shutdown",
+	)
 
 	return cmd
 }

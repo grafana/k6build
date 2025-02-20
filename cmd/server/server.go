@@ -2,10 +2,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/builder"
@@ -96,7 +100,7 @@ func livenessHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // New creates new cobra command for the server command.
-func New() *cobra.Command { //nolint:funlen
+func New() *cobra.Command { //nolint:funlen,gocognit
 	var (
 		allowBuildSemvers bool
 		catalogURL        string
@@ -110,6 +114,7 @@ func New() *cobra.Command { //nolint:funlen
 		s3Region          string
 		storeURL          string
 		verbose           bool
+		shutdownTimeout   time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -205,13 +210,44 @@ func New() *cobra.Command { //nolint:funlen
 			// add liveness check
 			srv.HandleFunc("/alive", livenessHandler)
 
-			listerAddr := fmt.Sprintf("0.0.0.0:%d", port)
-			log.Info("starting server", "address", listerAddr)
-			err = http.ListenAndServe(listerAddr, srv) //nolint:gosec
-			if err != nil {
-				log.Info("server ended", "error", err.Error())
+			httpServer := &http.Server{
+				Addr:              fmt.Sprintf("0.0.0.0:%d", port),
+				Handler:           srv,
+				ReadHeaderTimeout: 5 * time.Second,
 			}
-			log.Info("ending server")
+
+			serverErrors := make(chan error, 1)
+
+			go func() {
+				log.Info("starting server", "address", httpServer.Addr)
+				err := httpServer.ListenAndServe()
+				if err != nil && err != http.ErrServerClosed {
+					serverErrors <- err
+				}
+			}()
+
+			shutdown := make(chan os.Signal, 1)
+			signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+			select {
+			case err := <-serverErrors:
+				return fmt.Errorf("server error: %w", err)
+
+			case sig := <-shutdown:
+				log.Debug("shutdown started", "signal", sig)
+
+				ctx, cancel := context.WithTimeout(cmd.Context(), shutdownTimeout)
+				defer cancel()
+
+				if err := httpServer.Shutdown(ctx); err != nil {
+					log.Error("graceful shutdown failed", "error", err)
+					if err := httpServer.Close(); err != nil {
+						return fmt.Errorf("could not stop server: %w", err)
+					}
+				}
+
+				log.Debug("shutdown completed")
+			}
 
 			return nil
 		},
@@ -240,6 +276,12 @@ func New() *cobra.Command { //nolint:funlen
 		"allow-build-semvers",
 		false,
 		"allow building versions with build metadata (e.g v0.0.0+build).",
+	)
+	cmd.Flags().DurationVar(
+		&shutdownTimeout,
+		"shutdown-timeout",
+		10*time.Second,
+		"maximum time to wait for graceful shutdown",
 	)
 
 	return cmd

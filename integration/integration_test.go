@@ -6,6 +6,8 @@ package k6provider
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -55,9 +57,23 @@ func Test_BuildServer(t *testing.T) {
 				t.Fatalf("building artifact  %v", err)
 			}
 
-			err = util.Download(context.TODO(), artifact.URL, filepath.Join(t.TempDir(), "k6"))
+			k6BinPath := filepath.Join(t.TempDir(), "k6")
+			err = util.Download(context.TODO(), artifact.URL, k6BinPath)
 			if err != nil {
 				t.Fatalf("building artifact  %v", err)
+			}
+
+			info, err := os.Stat(k6BinPath)
+			if err != nil {
+				t.Fatalf("stat k6 %v", err)
+			}
+			if info.Size() == 0 {
+				t.Fatalf("k6 binary is empty")
+			}
+
+			err = exec.Command(k6BinPath, "version").Run()
+			if err != nil {
+				t.Fatalf("running k6 %v", err)
 			}
 		})
 	}

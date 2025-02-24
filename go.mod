@@ -11,7 +11,7 @@ require (
 	github.com/aws/smithy-go v1.22.2
 	github.com/docker/go-connections v0.5.0
 	github.com/grafana/clireadme v0.1.0
-	github.com/grafana/k6foundry v0.4.4
+	github.com/grafana/k6foundry v0.4.5
 	github.com/spf13/cobra v1.9.1
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.35.0
 )

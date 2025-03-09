@@ -90,7 +90,7 @@ require (
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/prometheus/client_golang v1.21.0
+	github.com/prometheus/client_golang v1.21.1
 	github.com/spf13/pflag v1.0.6 // indirect
 	golang.org/x/mod v0.23.0 // indirect
 )

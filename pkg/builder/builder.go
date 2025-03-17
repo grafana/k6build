@@ -13,10 +13,10 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/catalog"
+	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6foundry"
 
@@ -75,6 +75,7 @@ type Config struct {
 	Store      store.ObjectStore
 	Foundry    FoundryFactory
 	Registerer prometheus.Registerer
+	Lock       lock.Lock
 }
 
 // Builder implements the BuildService interface
@@ -82,9 +83,9 @@ type Builder struct {
 	opts    Opts
 	catalog string
 	store   store.ObjectStore
-	mutexes sync.Map
 	foundry FoundryFactory
 	metrics *metrics
+	lock    lock.Lock
 }
 
 // New returns a new instance of Builder given a BuilderConfig
@@ -110,12 +111,17 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		}
 	}
 
+	buildLock := config.Lock
+	if buildLock == nil {
+		buildLock = lock.NewMemoryLock()
+	}
 	return &Builder{
 		catalog: config.Catalog,
 		opts:    config.Opts,
 		store:   config.Store,
 		foundry: foundry,
 		metrics: metrics,
+		lock:    buildLock,
 	}, nil
 }
 
@@ -151,8 +157,11 @@ func (b *Builder) Build(
 
 	id := generateArtifactID(platform, resolved)
 
-	unlock := b.lockArtifact(id)
-	defer unlock()
+	unlock, err := b.lock.Lock(ctx, id)
+	if err != nil {
+		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+	}
+	defer unlock(ctx) //nolint:errcheck
 
 	artifactObject, err := b.store.Get(ctx, id)
 	if err == nil {
@@ -255,22 +264,6 @@ func (b *Builder) resolveDependencies(
 	}
 
 	return resolved, nil
-}
-
-// lockArtifact obtains a mutex used to prevent concurrent builds of the same artifact and
-// returns a function that will unlock the mutex associated to the given id in the object store.
-// The lock is also removed from the map. Subsequent calls will get another lock on the same
-// id but this is safe as the object should already be in the object store and no further
-// builds are needed.
-func (b *Builder) lockArtifact(id string) func() {
-	value, _ := b.mutexes.LoadOrStore(id, &sync.Mutex{})
-	mtx, _ := value.(*sync.Mutex)
-	mtx.Lock()
-
-	return func() {
-		b.mutexes.Delete(id)
-		mtx.Unlock()
-	}
 }
 
 // hasBuildMetadata checks if the constrain references a version with a build metadata.

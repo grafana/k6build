@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
 	"github.com/grafana/k6build"
+	s3client "github.com/grafana/k6build/pkg/s3/client"
 	"github.com/grafana/k6build/pkg/store"
 )
 
@@ -35,40 +35,15 @@ type Store struct {
 
 // Config S3 Store configuration
 type Config struct {
-	// Name of the S3 bucket
-	Bucket string
-	// S3 Client
 	Client *s3.Client
 	// AWS endpoint (used for testing)
 	Endpoint string
 	// AWS Region
 	Region string
+	// Name of the S3 bucket
+	Bucket string
 	// Expiration for the presigned download URLs
 	URLExpiration time.Duration
-}
-
-// returns the S3 client options
-func (c Config) s3Opts() []func(o *s3.Options) {
-	opts := []func(o *s3.Options){}
-
-	if c.Endpoint != "" {
-		opts = append(opts, func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(c.Endpoint)
-			o.UsePathStyle = true
-		})
-	}
-	return opts
-}
-
-// returns the aws configuration load options from Config
-func (c Config) awsOpts() []func(*config.LoadOptions) error {
-	opts := []func(*config.LoadOptions) error{}
-
-	if c.Region != "" {
-		opts = append(opts, config.WithRegion(c.Region))
-	}
-
-	return opts
 }
 
 // WithExpiration sets the expiration for the presigned URL
@@ -80,17 +55,21 @@ func WithExpiration(exp time.Duration) func(*s3.PresignOptions) {
 
 // New creates an object store backed by a S3 bucket
 func New(conf Config) (store.ObjectStore, error) {
+	var err error
+
 	if conf.Bucket == "" {
 		return nil, fmt.Errorf("%w: bucket name cannot be empty", store.ErrInitializingStore)
 	}
 
 	client := conf.Client
 	if client == nil {
-		cfg, err := config.LoadDefaultConfig(context.TODO(), conf.awsOpts()...)
+		client, err = s3client.New(s3client.Config{
+			Region:   conf.Region,
+			Endpoint: conf.Endpoint,
+		})
 		if err != nil {
-			return nil, k6build.NewWrappedError(store.ErrInitializingStore, err)
+			return nil, fmt.Errorf("%w: error creating S3 client", store.ErrInitializingStore)
 		}
-		client = s3.NewFromConfig(cfg, conf.s3Opts()...)
 	}
 
 	expiration := conf.URLExpiration

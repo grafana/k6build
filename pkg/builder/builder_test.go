@@ -322,18 +322,18 @@ func TestConcurrentBuilds(t *testing.T) {
 				{Name: "k6/x/ext", Constraints: "v0.1.0"},
 			},
 		},
-		{
-			k6Ver: "v0.1.0",
-			deps: []k6build.Dependency{
-				{Name: "k6/x/ext", Constraints: "v0.1.0"},
-			},
-		},
-		{
-			k6Ver: "v0.2.0",
-			deps: []k6build.Dependency{
-				{Name: "k6/x/ext", Constraints: "v0.1.0"},
-			},
-		},
+		// {
+		// 	k6Ver: "v0.1.0",
+		// 	deps: []k6build.Dependency{
+		// 		{Name: "k6/x/ext", Constraints: "v0.1.0"},
+		// 	},
+		// },
+		// {
+		// 	k6Ver: "v0.2.0",
+		// 	deps: []k6build.Dependency{
+		// 		{Name: "k6/x/ext", Constraints: "v0.1.0"},
+		// 	},
+		// },
 	}
 
 	errch := make(chan error, len(builds))

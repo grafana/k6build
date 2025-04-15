@@ -32,7 +32,7 @@ jobs:
           LINT_VERSION=$(head -n 1 ".golangci.yml" | tr -d '# ')
           echo "LINT_VERSION=${LINT_VERSION}" >> $GITHUB_ENV
       - name: Go linter
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ env.LINT_VERSION }}
           args: --timeout=30m

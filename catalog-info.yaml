@@ -1,0 +1,13 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: k6build
+  title: k6build
+  description: |
+    k6build builds custom k6 binaries with extensions.
+  annotations:
+    github.com/project-slug: grafana/k6build
+spec:
+  type: tool
+  owner: group:default/k6-extensions
+  lifecycle: production

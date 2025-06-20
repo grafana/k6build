@@ -124,7 +124,7 @@ func New(_ context.Context, config Config) (*Builder, error) {
 }
 
 // Build builds a custom k6 binary with dependencies
-func (b *Builder) Build( //nolint:funlen
+func (b *Builder) Build(
 	ctx context.Context,
 	platform string,
 	k6Constrains string,

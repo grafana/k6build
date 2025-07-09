@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/api"
@@ -19,10 +22,13 @@ var ErrInvalidConfiguration = errors.New("invalid configuration")
 
 const (
 	defaultAuthType = "Bearer"
+	buildPath       = "build"
+	resolvePath     = "resolve"
 
-	buildPath = "build"
-
-	resolvePath = "resolve"
+	// DefaultRetries number of retries for download requests
+	DefaultRetries = 3
+	// DefaultBackoff initial backoff time between retries. It is incremented exponentially between retries.
+	DefaultBackoff = 1 * time.Second
 )
 
 // BuildServiceClientConfig defines the configuration for accessing a remote build service
@@ -39,6 +45,11 @@ type BuildServiceClientConfig struct {
 	Headers map[string]string
 	// HTTPClient custom http client
 	HTTPClient *http.Client
+	// Retries number of retries for download requests. Default to 3
+	Retries int
+	// Backoff initial backoff time between retries. Default to 1s
+	// It is incremented exponentially between retries: 1s, 2s, 4s...
+	Backoff time.Duration
 }
 
 // NewBuildServiceClient returns a new client for a remote build service
@@ -62,6 +73,8 @@ func NewBuildServiceClient(config BuildServiceClientConfig) (k6build.BuildServic
 		authType: config.AuthorizationType,
 		headers:  config.Headers,
 		client:   client,
+		retries:  config.Retries,
+		backoff:  config.Backoff,
 	}, nil
 }
 
@@ -72,6 +85,8 @@ type BuildClient struct {
 	auth     string
 	headers  map[string]string
 	client   *http.Client
+	retries  int
+	backoff  time.Duration
 }
 
 // Build request building an artifact to a build service
@@ -159,10 +174,52 @@ func (r *BuildClient) doRequest(ctx context.Context, path string, request any, r
 		req.Header.Add(h, v)
 	}
 
-	resp, err := r.client.Do(req)
+	var (
+		resp    *http.Response
+		backoff = r.backoff
+		retries = r.retries
+	)
+
+	if retries == 0 {
+		retries = DefaultRetries
+	}
+
+	if backoff == 0 {
+		backoff = DefaultBackoff
+	}
+
+	// preserve body for retries
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		return k6build.NewWrappedError(api.ErrRequestFailed, err)
 	}
+
+	// close the original body, we don't need it anymore
+	err = req.Body.Close()
+	if err != nil {
+		return k6build.NewWrappedError(api.ErrRequestFailed, err)
+	}
+
+	// try at least once
+	for {
+		req.Body = io.NopCloser(bytes.NewReader(body)) // reset the body
+		resp, err = r.client.Do(req)
+
+		if retries == 0 || !shouldRetry(err, resp) {
+			break
+		}
+
+		time.Sleep(backoff)
+
+		// increase backoff exponentially for next retry
+		backoff *= 2
+		retries--
+	}
+
+	if err != nil {
+		return k6build.NewWrappedError(api.ErrRequestFailed, err)
+	}
+
 	defer func() {
 		_ = resp.Body.Close()
 	}()
@@ -177,4 +234,26 @@ func (r *BuildClient) doRequest(ctx context.Context, path string, request any, r
 	}
 
 	return nil
+}
+
+// shouldRetry returns true if the error or response indicates that the request should be retried
+func shouldRetry(err error, resp *http.Response) bool {
+	if err != nil {
+		if errors.Is(err, io.EOF) { // assuming EOF is due to connection interrupted by network error
+			return true
+		}
+
+		var ne net.Error
+		if errors.As(err, &ne) {
+			return ne.Timeout()
+		}
+
+		return false
+	}
+
+	if resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusBadGateway {
+		return true
+	}
+
+	return false
 }

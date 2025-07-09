@@ -89,6 +89,19 @@ func response(status int, response any) requestHandler {
 	}
 }
 
+// fail with the given error up to a number of times
+func unreliable(status int, failures int) requestHandler {
+	requests := 0
+	return func(w http.ResponseWriter, r *http.Request) bool {
+		requests++
+		if requests <= failures {
+			w.WriteHeader(status)
+			return false
+		}
+		return true
+	}
+}
+
 // creates a chain of handlers. Executes them until one returns false
 func handlerChain(handlers ...requestHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -169,10 +182,25 @@ func TestBuild(t *testing.T) {
 			),
 			expectErr: nil,
 		},
+		{
+			title: "test retry request",
+			handler: handlerChain(
+				unreliable(http.StatusServiceUnavailable, 1),
+				response(http.StatusOK, api.BuildResponse{}),
+			),
+			expectErr: nil,
+		},
+		{
+			title: "test we don't retry forever",
+			handler: handlerChain(
+				unreliable(http.StatusServiceUnavailable, 10),
+				response(http.StatusOK, api.BuildResponse{}),
+			),
+			expectErr: api.ErrRequestFailed,
+		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -193,7 +221,7 @@ func TestBuild(t *testing.T) {
 			}
 
 			_, err = client.Build(
-				context.TODO(),
+				t.Context(),
 				"linux/amd64",
 				"v0.1.0",
 				[]k6build.Dependency{{Name: "k6/x/test", Constraints: "*"}},
@@ -206,7 +234,7 @@ func TestBuild(t *testing.T) {
 	}
 }
 
-func TestResolce(t *testing.T) {
+func TestResolve(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {

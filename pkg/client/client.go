@@ -25,7 +25,7 @@ const (
 	buildPath       = "build"
 	resolvePath     = "resolve"
 
-	// DefaultRetries number of retries for download requests
+	// DefaultRetries number of retries for requests
 	DefaultRetries = 3
 	// DefaultBackoff initial backoff time between retries. It is incremented exponentially between retries.
 	DefaultBackoff = 1 * time.Second
@@ -45,7 +45,7 @@ type BuildServiceClientConfig struct {
 	Headers map[string]string
 	// HTTPClient custom http client
 	HTTPClient *http.Client
-	// Retries number of retries for download requests. Default to 3
+	// Retries number of retries for requests. Default to 3
 	Retries int
 	// Backoff initial backoff time between retries. Default to 1s
 	// It is incremented exponentially between retries: 1s, 2s, 4s...

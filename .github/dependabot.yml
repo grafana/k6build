@@ -2,6 +2,11 @@ version: 2
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
+    ignore:
+     - dependency-name: github.com/spf13/cobra
+     - dependency-name: github.com/Masterminds/semver/v3
+     - dependency-name: go.opentelemetry.io/otel
+     - dependency-name: github.com/prometheus/client_golang
     groups:
       aws:
         patterns:

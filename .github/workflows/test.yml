@@ -42,18 +42,3 @@ jobs:
 
       - name: Integration Tests
         run: go test -tags integration -race -count 1 ./integration/...
-
-      - name: Coverage Test
-        if: ${{ matrix.platform == 'ubuntu-latest' && github.ref_name == 'main' }}
-        run: go test -count 1 -coverprofile=coverage.txt ./...
-
-      - name: Upload Coverage
-        if: ${{ matrix.platform == 'ubuntu-latest' && github.ref_name == 'main' }}
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d #v5.4.2
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: grafana/k6build
-
-      - name: Generate Go Report Card
-        if: ${{ matrix.platform == 'ubuntu-latest' && github.ref_name == 'main' }}
-        uses: creekorful/goreportcard-action@1f35ced8cdac2cba28c9a2f2288a16aacfd507f9 # v1.0.0

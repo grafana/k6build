@@ -4,7 +4,7 @@ set -eo pipefail
 
 go install go.k6.io/xk6@latest
 
-CHANGES=$(xk6 sync 2>&1 | grep "Sync module=" | sed -E 's/.*Sync module=//')
+CHANGES=$(xk6 sync -m)
 
 if [[ -z $CHANGES ]]; then
     echo "Nothing to do."

@@ -103,7 +103,7 @@ func TestAPI(t *testing.T) {
 			path:         "build",
 			req:          &api.BuildRequest{Platform: "linux/amd64", K6Constrains: "v0.1.0"},
 			resp:         &api.BuildResponse{},
-			expectStatus: http.StatusOK,
+			expectStatus: http.StatusInternalServerError,
 			expectErr:    api.ErrBuildFailed,
 		},
 		{
@@ -145,7 +145,7 @@ func TestAPI(t *testing.T) {
 		{
 			title: "resolve error",
 			builder: mockBuilder{
-				err: api.ErrCannotSatisfy,
+				err: k6build.ErrInvalidParameters,
 			},
 			path:         "resolve",
 			req:          &api.ResolveRequest{K6Constrains: "v0.1.0"},

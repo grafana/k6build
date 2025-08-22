@@ -110,6 +110,9 @@ func (r *BuildClient) Build(
 
 	err := r.doRequest(ctx, buildPath, &buildRequest, &buildResponse)
 	if err != nil {
+		if buildResponse.Error != nil {
+			return k6build.Artifact{}, buildResponse.Error
+		}
 		return k6build.Artifact{}, err
 	}
 
@@ -136,6 +139,9 @@ func (r *BuildClient) Resolve(
 
 	err := r.doRequest(ctx, resolvePath, &resolveRequest, &resolveResponse)
 	if err != nil {
+		if resolveResponse.Error != nil {
+			return nil, resolveResponse.Error
+		}
 		return nil, err
 	}
 
@@ -146,6 +152,7 @@ func (r *BuildClient) Resolve(
 	return resolveResponse.Dependencies, nil
 }
 
+//nolint:funlen // TODO: consider refactoring
 func (r *BuildClient) doRequest(ctx context.Context, path string, request any, response any) error {
 	marshaled := &bytes.Buffer{}
 	err := json.NewEncoder(marshaled).Encode(request)
@@ -224,15 +231,20 @@ func (r *BuildClient) doRequest(ctx context.Context, path string, request any, r
 		_ = resp.Body.Close()
 	}()
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		err = json.NewDecoder(resp.Body).Decode(&response)
+		if err != nil {
+			return k6build.NewWrappedError(api.ErrRequestFailed, err)
+		}
+	case http.StatusInternalServerError:
+		// try to decode response, it should be there, but don't report error if not
+		_ = json.NewDecoder(resp.Body).Decode(&response)
+		return k6build.NewWrappedError(api.ErrRequestFailed, errors.New(resp.Status))
+	default:
+		// don't even try to decode response
 		return k6build.NewWrappedError(api.ErrRequestFailed, errors.New(resp.Status))
 	}
-
-	err = json.NewDecoder(resp.Body).Decode(&response)
-	if err != nil {
-		return k6build.NewWrappedError(api.ErrRequestFailed, err)
-	}
-
 	return nil
 }
 

@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -54,14 +55,6 @@ func (a *APIServer) Build(w http.ResponseWriter, r *http.Request) {
 
 	resp := api.BuildResponse{}
 
-	// ensure errors are reported and logged
-	defer func() {
-		if resp.Error != nil {
-			a.log.Error(resp.Error.Error())
-			_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
-		}
-	}()
-
 	req := api.BuildRequest{}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -80,17 +73,22 @@ func (a *APIServer) Build(w http.ResponseWriter, r *http.Request) {
 		req.K6Constrains,
 		req.Dependencies,
 	)
-	if err != nil {
+
+	switch {
+	case err == nil:
 		w.WriteHeader(http.StatusOK)
+		resp.Artifact = artifact
+		a.log.Debug("returning", "response", resp.String())
+	case errors.Is(err, k6build.ErrInvalidParameters):
+		w.WriteHeader(http.StatusOK)
+		resp.Error = k6build.NewWrappedError(api.ErrCannotSatisfy, err)
+		a.log.Info(resp.Error.Error())
+	default:
 		resp.Error = k6build.NewWrappedError(api.ErrBuildFailed, err)
-		return
+		w.WriteHeader(http.StatusInternalServerError)
+		a.log.Error(resp.Error.Error())
 	}
 
-	resp.Artifact = artifact
-
-	a.log.Debug("returning", "response", resp.String())
-
-	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 }
 
@@ -100,19 +98,10 @@ func (a *APIServer) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("Content-Type", "application/json")
 
-	// ensure errors are reported and logged
-	defer func() {
-		if resp.Error != nil {
-			a.log.Error(resp.Error.Error())
-			_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
-		}
-	}()
-
 	req := api.ResolveRequest{}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	err := decoder.Decode(&req)
-	// err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		resp.Error = k6build.NewWrappedError(api.ErrInvalidRequest, err)
@@ -126,15 +115,21 @@ func (a *APIServer) Resolve(w http.ResponseWriter, r *http.Request) {
 		req.K6Constrains,
 		req.Dependencies,
 	)
-	if err != nil {
+
+	switch {
+	case err == nil:
+		resp.Dependencies = deps
 		w.WriteHeader(http.StatusOK)
+		a.log.Debug("returning", "response", resp.String())
+	case errors.Is(err, k6build.ErrInvalidParameters):
+		w.WriteHeader(http.StatusOK)
+		resp.Error = k6build.NewWrappedError(api.ErrCannotSatisfy, err)
+		a.log.Info(resp.Error.Error())
+	default:
 		resp.Error = k6build.NewWrappedError(api.ErrResolveFailed, err)
-		return
+		w.WriteHeader(http.StatusInternalServerError)
+		a.log.Error(resp.Error.Error())
 	}
 
-	a.log.Debug("returning", "response", resp.String())
-
-	resp.Dependencies = deps
-	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 }

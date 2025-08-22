@@ -181,7 +181,7 @@ func (b *Builder) Build(
 
 	err = b.buildArtifact(ctx, platform, resolved, artifactBuffer)
 	if err != nil {
-		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrBuildFailed, err)
+		return k6build.Artifact{}, err
 	}
 	buildTimer.ObserveDuration()
 

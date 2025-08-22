@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -56,10 +57,15 @@ func (a *APIServer) Build(w http.ResponseWriter, r *http.Request) {
 
 	// ensure errors are reported and logged
 	defer func() {
-		if resp.Error != nil {
+		switch {
+		case resp.Error == nil:
+			return
+		case errors.Is(resp.Error, k6build.ErrInvalidParameters):
+			a.log.Info(resp.Error.Error())
+		default:
 			a.log.Error(resp.Error.Error())
-			_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 		}
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 	}()
 
 	req := api.BuildRequest{}
@@ -102,10 +108,15 @@ func (a *APIServer) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	// ensure errors are reported and logged
 	defer func() {
-		if resp.Error != nil {
+		switch {
+		case resp.Error == nil:
+			return
+		case errors.Is(resp.Error, k6build.ErrInvalidParameters):
+			a.log.Info(resp.Error.Error())
+		default:
 			a.log.Error(resp.Error.Error())
-			_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 		}
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 	}()
 
 	req := api.ResolveRequest{}

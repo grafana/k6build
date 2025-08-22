@@ -398,7 +398,7 @@ func (b *Builder) buildArtifact(
 	_, err = builder.Build(ctx, buildPlatform, k6Version, mods, nil, []string{}, artifactBuffer)
 	if err != nil {
 		b.metrics.buildsFailedCounter.Inc()
-		return k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+		return k6build.NewWrappedError(k6build.ErrBuildFailed, err)
 	}
 
 	// TODO: complete artifact info

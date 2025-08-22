@@ -109,7 +109,7 @@ func TestBuild(t *testing.T) {
 			title:     "build unsatisfied constrain (>v0.2.0)",
 			k6:        ">v0.2.0",
 			deps:      []k6build.Dependency{},
-			expectErr: ErrInvalidParameters,
+			expectErr: k6build.ErrInvalidParameters,
 		},
 	}
 
@@ -176,7 +176,7 @@ func TestResolve(t *testing.T) {
 			title:     "unsatisfied k6 constrain (>v0.2.0)",
 			k6:        ">v0.2.0",
 			deps:      []k6build.Dependency{},
-			expectErr: ErrResolvingDependencies,
+			expectErr: k6build.ErrResolvingDependencies,
 		},
 		{
 			title:     "resolve multiple dependencies constraint",
@@ -192,7 +192,7 @@ func TestResolve(t *testing.T) {
 			title:     "build k6 v0.1.0 unsatisfied dependency constrain",
 			k6:        "v0.1.0",
 			deps:      []k6build.Dependency{{Name: "k6/x/ext", Constraints: ">v0.2.0"}},
-			expectErr: ErrResolvingDependencies,
+			expectErr: k6build.ErrResolvingDependencies,
 		},
 	}
 
@@ -536,7 +536,7 @@ func TestMetrics(t *testing.T) {
 					[]k6build.Dependency{},
 				)
 				// ignore unsatisfied builds as they are expected
-				if err != nil && !errors.Is(err, ErrInvalidParameters) {
+				if err != nil && !errors.Is(err, k6build.ErrInvalidParameters) {
 					t.Fatalf("unexpected %v", err)
 				}
 			}

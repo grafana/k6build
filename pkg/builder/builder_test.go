@@ -176,7 +176,7 @@ func TestResolve(t *testing.T) {
 			title:     "unsatisfied k6 constrain (>v0.2.0)",
 			k6:        ">v0.2.0",
 			deps:      []k6build.Dependency{},
-			expectErr: k6build.ErrResolvingDependencies,
+			expectErr: k6build.ErrInvalidParameters,
 		},
 		{
 			title:     "resolve multiple dependencies constraint",
@@ -192,7 +192,7 @@ func TestResolve(t *testing.T) {
 			title:     "build k6 v0.1.0 unsatisfied dependency constrain",
 			k6:        "v0.1.0",
 			deps:      []k6build.Dependency{{Name: "k6/x/ext", Constraints: ">v0.2.0"}},
-			expectErr: k6build.ErrResolvingDependencies,
+			expectErr: k6build.ErrInvalidParameters,
 		},
 	}
 

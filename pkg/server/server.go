@@ -2,7 +2,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -67,8 +66,8 @@ func (a *APIServer) Build(w http.ResponseWriter, r *http.Request) {
 
 	a.log.Debug("processing", "request", req.String())
 
-	artifact, err := a.srv.Build( //nolint:contextcheck
-		context.Background(),
+	artifact, err := a.srv.Build(
+		r.Context(),
 		req.Platform,
 		req.K6Constrains,
 		req.Dependencies,
@@ -110,8 +109,8 @@ func (a *APIServer) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	a.log.Debug("processing", "request", req.String())
 
-	deps, err := a.srv.Resolve( //nolint:contextcheck
-		context.Background(),
+	deps, err := a.srv.Resolve(
+		r.Context(),
 		req.K6Constrains,
 		req.Dependencies,
 	)

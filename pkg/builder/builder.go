@@ -33,12 +33,8 @@ const (
 )
 
 var (
-	ErrAccessingArtifact     = errors.New("accessing artifact") //nolint:revive
-	ErrBuildingArtifact      = errors.New("building artifact")
-	ErrBuildSemverNotAllowed = errors.New("semvers with build metadata not allowed")
+	ErrBuildSemverNotAllowed = errors.New("semvers with build metadata not allowed") //nolint:revive
 	ErrInitializingBuilder   = errors.New("initializing builder")
-	ErrInvalidParameters     = errors.New("invalid build parameters")
-	ErrResolvingDependencies = errors.New("resolving dependencies")
 
 	constrainRe = regexp.MustCompile(opRe + verRe + buildRe)
 )
@@ -140,7 +136,7 @@ func (b *Builder) Build(
 
 		// FIXME: this is a temporary solution because the logic has many paths that return
 		// an invalid parameters error and we need to increment the metrics in all of them
-		if errors.Is(buildErr, ErrInvalidParameters) {
+		if errors.Is(buildErr, k6build.ErrInvalidParameters) {
 			b.metrics.buildsInvalidCounter.Inc()
 		}
 	}()
@@ -148,12 +144,12 @@ func (b *Builder) Build(
 	// check if the platform is valid early to avoid unnecessary work
 	_, err := k6foundry.ParsePlatform(platform)
 	if err != nil {
-		return k6build.Artifact{}, k6build.NewWrappedError(ErrInvalidParameters, err)
+		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 	}
 
 	resolved, err := b.resolveDependencies(ctx, k6Constrains, deps)
 	if err != nil {
-		return k6build.Artifact{}, k6build.NewWrappedError(ErrInvalidParameters, err)
+		return k6build.Artifact{}, err
 	}
 
 	id := generateArtifactID(platform, resolved)
@@ -175,7 +171,7 @@ func (b *Builder) Build(
 	}
 
 	if !errors.Is(err, store.ErrObjectNotFound) {
-		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
+		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
 	}
 
 	b.metrics.buildCounter.Inc()
@@ -185,7 +181,7 @@ func (b *Builder) Build(
 
 	err = b.buildArtifact(ctx, platform, resolved, artifactBuffer)
 	if err != nil {
-		return k6build.Artifact{}, k6build.NewWrappedError(ErrBuildingArtifact, err)
+		return k6build.Artifact{}, err
 	}
 	buildTimer.ObserveDuration()
 
@@ -197,7 +193,7 @@ func (b *Builder) Build(
 	}
 
 	if err != nil {
-		return k6build.Artifact{}, k6build.NewWrappedError(ErrAccessingArtifact, err)
+		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
 	}
 
 	return k6build.Artifact{
@@ -217,7 +213,7 @@ func (b *Builder) Resolve(
 ) (map[string]string, error) {
 	resolved, err := b.resolveDependencies(ctx, k6Constrains, deps)
 	if err != nil {
-		return nil, k6build.NewWrappedError(ErrResolvingDependencies, err)
+		return nil, err
 	}
 
 	return resolvedVersions(resolved), nil
@@ -230,7 +226,7 @@ func (b *Builder) resolveDependencies(
 ) (map[string]catalog.Module, error) {
 	ctlg, err := catalog.NewCatalog(ctx, b.catalog)
 	if err != nil {
-		return nil, err
+		return nil, k6build.NewWrappedError(k6build.ErrCatalog, err)
 	}
 
 	resolved := map[string]catalog.Module{}
@@ -241,18 +237,18 @@ func (b *Builder) resolveDependencies(
 	var k6Mod catalog.Module
 	buildMetadata, err := hasBuildMetadata(k6Constrains)
 	if err != nil {
-		return nil, err
+		return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 	}
 	if buildMetadata != "" {
 		if !b.opts.AllowBuildSemvers {
-			return nil, ErrBuildSemverNotAllowed
+			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, ErrBuildSemverNotAllowed)
 		}
 		// use a semantic version for the build metadata
 		k6Mod = catalog.Module{Path: k6Path, Version: "v0.0.0+" + buildMetadata}
 	} else {
 		k6Mod, err = ctlg.Resolve(ctx, catalog.Dependency{Name: k6DependencyName, Constrains: k6Constrains})
 		if err != nil {
-			return nil, err
+			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 		}
 	}
 	resolved[k6DependencyName] = k6Mod
@@ -260,7 +256,7 @@ func (b *Builder) resolveDependencies(
 	for _, d := range deps {
 		m, err := ctlg.Resolve(ctx, catalog.Dependency{Name: d.Name, Constrains: d.Constraints})
 		if err != nil {
-			return nil, err
+			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 		}
 		resolved[d.Name] = m
 	}
@@ -302,17 +298,11 @@ func hasBuildMetadata(constrain string) (string, error) {
 	build := matches[preIdx]
 
 	if op != "" && op != "=" {
-		return "", k6build.NewWrappedError(
-			ErrInvalidParameters,
-			fmt.Errorf("only exact match is allowed for versions with build metadata"),
-		)
+		return "", fmt.Errorf("only exact match is allowed for versions with build metadata")
 	}
 
 	if ver != "v0.0.0" {
-		return "", k6build.NewWrappedError(
-			ErrInvalidParameters,
-			fmt.Errorf("version with build metadata must start with v0.0.0"),
-		)
+		return "", fmt.Errorf("version with build metadata must start with v0.0.0")
 	}
 	return build, nil
 }
@@ -402,7 +392,7 @@ func (b *Builder) buildArtifact(
 	_, err = builder.Build(ctx, buildPlatform, k6Version, mods, nil, []string{}, artifactBuffer)
 	if err != nil {
 		b.metrics.buildsFailedCounter.Inc()
-		return k6build.NewWrappedError(ErrAccessingArtifact, err)
+		return k6build.NewWrappedError(k6build.ErrBuildFailed, err)
 	}
 
 	// TODO: complete artifact info

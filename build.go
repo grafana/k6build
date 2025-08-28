@@ -8,7 +8,13 @@ import (
 	"fmt"
 )
 
-var ErrBuildFailed = errors.New("build failed") //nolint:revive
+var (
+	ErrAccessingArtifact     = errors.New("accessing artifact") //nolint:revive
+	ErrBuildFailed           = errors.New("build failed")
+	ErrCatalog               = errors.New("accessing catalog")
+	ErrInvalidParameters     = errors.New("invalid build parameters")
+	ErrResolvingDependencies = errors.New("resolving dependencies")
+)
 
 // Dependency defines a dependency and its semantic version constrains
 type Dependency struct {

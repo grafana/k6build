@@ -58,7 +58,7 @@ func newMetrics() *metrics {
 		Namespace: metricsNamespace,
 		Name:      "build_duration_seconds",
 		Help:      "The duration of the build in seconds",
-		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300},
+		Buckets:   []float64{1, 5, 10, 20, 30, 45, 60, 75, 90, 105, 120, 300},
 	})
 
 	return &metrics{

@@ -6,22 +6,19 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"runtime"
+	"strings"
 	"testing"
 
+	s3test "github.com/grafana/k6build/pkg/s3/test"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/docker/go-connections/nat"
 	"github.com/grafana/k6build/pkg/store"
-
-	"github.com/testcontainers/testcontainers-go/modules/localstack"
 )
 
 type object struct {
@@ -29,59 +26,29 @@ type object struct {
 	content []byte
 }
 
-func s3Client(ctx context.Context, l *localstack.LocalStackContainer) (*s3.Client, error) {
-	region := "us-east-1"
-	host, err := l.Host(ctx)
-	if err != nil {
-		return nil, err
-	}
+func setupStore(t *testing.T, preload []object) store.ObjectStore {
+	t.Helper()
 
-	mappedPort, err := l.MappedPort(ctx, nat.Port("4566/tcp"))
+	client, terminate, err := s3test.New(t.Context())
 	if err != nil {
-		return nil, err
+		t.Fatalf("setting up test %v", err)
 	}
-
-	awsEndP := fmt.Sprintf("http://%s:%s", host, mappedPort.Port()) //nolint:nosprintfhostport
-	awsCfg, err := config.LoadDefaultConfig(context.TODO(),         //nolint:contextcheck
-		config.WithRegion(region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("accesskey", "secretkey", "token")),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(awsEndP)
-		o.UsePathStyle = true
+	t.Cleanup(func() {
+		terminate(t.Context())
 	})
 
-	return client, nil
-}
-
-func setupStore(preload []object) (store.ObjectStore, error) {
-	bucket := "test"
-
-	localstack, err := localstack.Run(context.TODO(), "localstack/localstack:latest")
-	if err != nil {
-		return nil, fmt.Errorf("localstack setup %w", err)
-	}
-
-	client, err := s3Client(context.TODO(), localstack)
-	if err != nil {
-		return nil, fmt.Errorf("creating s3 client %w", err)
-	}
-
-	_, err = client.CreateBucket(context.TODO(), &s3.CreateBucketInput{
+	bucket := strings.ReplaceAll(strings.ToLower(t.Name()), "_", "-")
+	_, err = client.CreateBucket(t.Context(), &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("s3 setup %w", err)
+		t.Fatalf("s3 setup %v", err)
 	}
 
 	for _, o := range preload {
 		checksum := sha256.Sum256(o.content)
 		_, err = client.PutObject(
-			context.TODO(),
+			t.Context(),
 			&s3.PutObjectInput{
 				Bucket:            aws.String(bucket),
 				Key:               aws.String(o.id),
@@ -91,16 +58,16 @@ func setupStore(preload []object) (store.ObjectStore, error) {
 			},
 		)
 		if err != nil {
-			return nil, fmt.Errorf("preload setup %w", err)
+			t.Fatalf("preload setup %v", err)
 		}
 	}
 
 	store, err := New(Config{Client: client, Bucket: bucket})
 	if err != nil {
-		return nil, fmt.Errorf("create store %w", err)
+		t.Fatalf("create store %v", err)
 	}
 
-	return store, nil
+	return store
 }
 
 func TestPutObject(t *testing.T) {
@@ -117,10 +84,7 @@ func TestPutObject(t *testing.T) {
 		},
 	}
 
-	s, err := setupStore(preload)
-	if err != nil {
-		t.Fatalf("test setup %v", err)
-	}
+	s := setupStore(t, preload)
 
 	testCases := []struct {
 		title     string
@@ -208,10 +172,7 @@ func TestGetObject(t *testing.T) {
 		},
 	}
 
-	s, err := setupStore(preload)
-	if err != nil {
-		t.Fatalf("test setup %v", err)
-	}
+	s := setupStore(t, preload)
 
 	testCases := []struct {
 		title     string

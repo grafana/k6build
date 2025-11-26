@@ -27,3 +27,19 @@ func (l *MemoryLock) Lock(_ context.Context, id string) (func(context.Context) e
 		return nil
 	}, nil
 }
+
+// Try attempts to acquire the lock. Returns a boolean indicating if it was successful.
+// If successful, returns a function to release the lock.
+func (l *MemoryLock) Try(_ context.Context, id string) (bool, func(context.Context) error, error) {
+	value, _ := l.mutexes.LoadOrStore(id, &sync.Mutex{})
+	mtx, _ := value.(*sync.Mutex)
+	if mtx.TryLock() {
+		return true, func(_ context.Context) error {
+			l.mutexes.Delete(id)
+			mtx.Unlock()
+			return nil
+		}, nil
+	}
+
+	return false, nil, nil
+}

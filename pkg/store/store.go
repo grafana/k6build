@@ -37,7 +37,9 @@ func (o Object) String() string {
 	return buffer.String()
 }
 
-// ObjectStore defines an interface for storing and retrieving blobs
+// ObjectStore defines an interface for storing and retrieving blobs.
+// The implementation must ensure strong read-after-write consistency.
+// Partially created/updated objects should not be returned
 type ObjectStore interface {
 	// Get retrieves an objects if exists in the store or an error otherwise
 	Get(ctx context.Context, id string) (Object, error)

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 
 	"github.com/grafana/k6build"
@@ -89,6 +89,23 @@ func NewS3Lock(conf S3Config) (Lock, error) {
 
 // Lock creates a lock for the given id. The lock is released when the returned function is called
 func (s *S3Lock) Lock(ctx context.Context, id string) (func(context.Context) error, error) {
+	for {
+		acquired, release, err := s.Try(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+
+		if acquired {
+			return release, nil
+		}
+
+		time.Sleep(s.backoff)
+	}
+}
+
+// Try attempts to reserve a lock for a given id. Returns a bool indicating if it could reserve it.
+// If the lock was acquired, returns a function that releases the lock.
+func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context) error, error) {
 	lockID := fmt.Sprintf("%s.lock.%s", id, uuid.New().String())
 	_, err := s.client.PutObject(
 		ctx,
@@ -99,7 +116,7 @@ func (s *S3Lock) Lock(ctx context.Context, id string) (func(context.Context) err
 		},
 	)
 	if err != nil {
-		return nil, k6build.NewWrappedError(ErrLocking, err)
+		return false, nil, k6build.NewWrappedError(ErrLocking, err)
 	}
 
 	release := func(ctx context.Context) error {
@@ -113,57 +130,57 @@ func (s *S3Lock) Lock(ctx context.Context, id string) (func(context.Context) err
 		return nil
 	}
 
-	for {
-		// we are assuming here that this call returns all the locks for the object
-		// this seems reasonable as these are locks for building the same object
-		// and we are deleting them in most cases
-		result, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			Bucket: aws.String(s.bucket),
-			Prefix: aws.String(fmt.Sprintf("%s.lock.", id)),
-		})
-		if err != nil {
-			return nil, k6build.NewWrappedError(ErrLocking, err)
-		}
-
-		locks := result.Contents
-		if len(locks) == 1 {
-			return release, nil
-		}
-
-		// sort oldest first. Break ties using id
-		sort.Slice(locks, func(i, j int) bool {
-			diff := locks[i].LastModified.Sub(*locks[j].LastModified)
-			if diff < 0 {
-				return true
-			}
-
-			if diff == 0 {  // same timestamp, break by id
-				return *locks[i].Key < *locks[j].Key
-			}
-
-			return false
-		})
-
-		// search for the first lock that is not expired. We use the LastUpdate of the newest (last)
-		// lock to calculate the expiration limit. Any lock older than this limit is considered expired.
-		// We don't use the local time to ensure times are synchronized by s3 clock
-		first := 0
-		last := len(locks) - 1
-		expirationLimit := locks[last].LastModified.Add(- s.lease)
-		for _, l := range locks {
-			// if the lock is not expired we found it
-			if l.LastModified.After(expirationLimit) {
-				break
-			}
-			first++
-		}
-
-		// if the first non expired is our lock, return it
-		if *locks[first].Key == lockID {
-			return release, nil
-		}
-
-		// sleep the backoff time
-		time.Sleep(s.backoff)
+	// we are assuming here that this call returns all the locks for the object
+	// this seems reasonable as these are locks for building the same object
+	// and we are deleting them in most cases
+	result, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.bucket),
+		Prefix: aws.String(fmt.Sprintf("%s.lock.", id)),
+	})
+	if err != nil {
+		return false, nil, k6build.NewWrappedError(ErrLocking, err)
 	}
+
+	locks := result.Contents
+	if len(locks) == 1 {
+		return true, release, nil
+	}
+
+	// sort oldest first. Break ties using id
+	sort.Slice(locks, func(i, j int) bool {
+		diff := locks[i].LastModified.Sub(*locks[j].LastModified)
+		if diff < 0 {
+			return true
+		}
+
+		if diff == 0 { // same timestamp, break by id
+			return *locks[i].Key < *locks[j].Key
+		}
+
+		return false
+	})
+
+	// search for the first lock that is not expired. We use the LastUpdate of the newest (last)
+	// lock to calculate the expiration limit. Any lock older than this limit is considered expired.
+	// We don't use the local time to ensure times are synchronized by s3 clock
+	first := 0
+	last := len(locks) - 1
+	expirationLimit := locks[last].LastModified.Add(-s.lease)
+	for _, l := range locks {
+		// if the lock is not expired we found it
+		if l.LastModified.After(expirationLimit) {
+			break
+		}
+		first++
+	}
+
+	// if the first non expired is our lock, return it
+	if *locks[first].Key == lockID {
+		return true, release, nil
+	}
+
+	// we were not successful
+	_ = release(ctx)
+
+	return false, nil, nil
 }

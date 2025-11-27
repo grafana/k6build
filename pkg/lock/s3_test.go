@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -17,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func setupS3Lock(t *testing.T, lease, backoff time.Duration) Lock {
+func setupS3Lock(t *testing.T, conf S3Config) Lock {
 	t.Helper()
 
 	client, terminate, err := s3test.New(t.Context())
@@ -36,12 +37,10 @@ func setupS3Lock(t *testing.T, lease, backoff time.Duration) Lock {
 		t.Fatalf("s3 setup %v", err)
 	}
 
-	lock, err := NewS3Lock(S3Config{
-		Client:  client,
-		Bucket:  bucket,
-		Lease:   lease,
-		Backoff: backoff,
-	})
+	conf.Client = client
+	conf.Bucket = bucket
+
+	lock, err := NewS3Lock(conf)
 	if err != nil {
 		t.Fatalf("create lock: %v", err)
 	}
@@ -120,7 +119,7 @@ func TestS3Lock_BasicLocking(t *testing.T) {
 		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
 	}
 
-	lock := setupS3Lock(t, defaultLease, defaultBackoff)
+	lock := setupS3Lock(t, S3Config{})
 
 	// Test basic lock acquisition and release
 	release, err := lock.Lock(t.Context(), "test-resource")
@@ -153,7 +152,7 @@ func TestS3Lock_MultipleLocks(t *testing.T) {
 		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
 	}
 
-	lock := setupS3Lock(t, defaultLease, defaultBackoff)
+	lock := setupS3Lock(t, S3Config{})
 
 	// Test acquiring locks for different resources
 	release1, err := lock.Lock(t.Context(), "resource-1")
@@ -190,7 +189,11 @@ func TestS3Lock_Concurrent(t *testing.T) {
 		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
 	}
 
-	lock := setupS3Lock(t, 5*time.Second, 100*time.Millisecond)
+	conf := S3Config{
+		Lease:   500 * time.Millisecond,
+		Backoff: 100 * time.Millisecond,
+	}
+	lock := setupS3Lock(t, conf)
 
 	const numGoroutines = 3
 	const resourceID = "shared-resource"
@@ -232,9 +235,12 @@ func TestS3Lock_ExpiredLock(t *testing.T) {
 		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
 	}
 
-	shortLease := 2 * time.Second
-	shortBackoff := 100 * time.Millisecond
-	lock := setupS3Lock(t, shortLease, shortBackoff)
+	conf := S3Config{
+		Lease:    100 * time.Millisecond,
+		Backoff:  100 * time.Millisecond,
+		MaxLease: 500 * time.Millisecond,
+	}
+	lock := setupS3Lock(t, conf)
 
 	// Acquire a lock but don't release it
 	_, err := lock.Lock(t.Context(), "test-resource")
@@ -242,8 +248,48 @@ func TestS3Lock_ExpiredLock(t *testing.T) {
 		t.Fatalf("failed to acquire first lock: %v", err)
 	}
 
-	// Wait for the lease to expire
-	time.Sleep(shortLease + time.Second)
+	// give time for the lock to reach the max lease.
+	// The updates should stop and the lock be released
+	time.Sleep(600 * time.Millisecond)
+
+	// Try to acquire the lock again - should succeed because the first lock expired
+	release2, err := lock.Lock(t.Context(), "test-resource")
+	if err != nil {
+		t.Fatalf("failed to acquire lock after expiration: %v", err)
+	}
+
+	err = release2(t.Context())
+	if err != nil {
+		t.Fatalf("failed to release second lock: %v", err)
+	}
+}
+
+func TestS3Lock_CancelContext(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
+	}
+
+	conf := S3Config{
+		Lease:   100 * time.Millisecond,
+		Backoff: 100 * time.Millisecond,
+		Grace:   200 * time.Millisecond,
+	}
+	lock := setupS3Lock(t, conf)
+
+	// Acquire a lock but don't release it
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err := lock.Lock(ctx, "test-resource")
+	if err != nil {
+		t.Fatalf("failed to acquire first lock: %v", err)
+	}
+
+	// cancel context, should stop lease update
+	cancel()
+
+	// give time for the lock to pass its lease update grace period
+	time.Sleep(300 * time.Millisecond)
 
 	// Try to acquire the lock again - should succeed because the first lock expired
 	release2, err := lock.Lock(t.Context(), "test-resource")

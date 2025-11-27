@@ -3,13 +3,14 @@ package lock
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/grafana/k6build"
 	s3client "github.com/grafana/k6build/pkg/s3/client"
@@ -21,6 +22,9 @@ const (
 
 	// Default backoff between checks for lease
 	defaultBackoff = time.Second
+
+	// default maximum time a lock can be held
+	defaultMaxLease = 5 * time.Minute
 )
 
 // S3Config S3 Lock configuration
@@ -36,15 +40,21 @@ type S3Config struct {
 	Lease time.Duration
 	// Backoff for lock checks
 	Backoff time.Duration
+	// Grace period to keep lease
+	Grace time.Duration
+	// Maximum lease time
+	MaxLease time.Duration
 }
 
 // S3Lock is a lock backed by a S3 bucket
 // Creates an object for the lock and checks until this lock is the oldest non-expired one
 type S3Lock struct {
-	client  *s3.Client
-	bucket  string
-	lease   time.Duration
-	backoff time.Duration
+	client   *s3.Client
+	bucket   string
+	lease    time.Duration
+	backoff  time.Duration
+	grace    time.Duration
+	maxLease time.Duration
 }
 
 // NewS3Lock creates a lock backed by a S3 bucket
@@ -79,11 +89,22 @@ func NewS3Lock(conf S3Config) (Lock, error) {
 		lease = defaultLease
 	}
 
+	grace := conf.Grace
+	if grace == 0 {
+		grace = lease * 3
+	}
+
+	maxLease := conf.MaxLease
+	if maxLease == 0 {
+		maxLease = defaultMaxLease
+	}
 	return &S3Lock{
-		client:  client,
-		bucket:  conf.Bucket,
-		lease:   lease,
-		backoff: backoff,
+		client:   client,
+		bucket:   conf.Bucket,
+		lease:    lease,
+		backoff:  backoff,
+		grace:    grace,
+		maxLease: maxLease,
 	}, nil
 }
 
@@ -105,82 +126,99 @@ func (s *S3Lock) Lock(ctx context.Context, id string) (func(context.Context) err
 
 // Try attempts to reserve a lock for a given id. Returns a bool indicating if it could reserve it.
 // If the lock was acquired, returns a function that releases the lock.
-func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context) error, error) {
-	lockID := fmt.Sprintf("%s.lock.%s", id, uuid.New().String())
-	_, err := s.client.PutObject(
+func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context) error, error) { //nolint:funlen
+	lockID := fmt.Sprintf("%s.lock", id)
+	lockObject, err := s.client.PutObject(
 		ctx,
 		&s3.PutObjectInput{
-			Bucket: aws.String(s.bucket),
-			Key:    aws.String(lockID),
-			Body:   bytes.NewReader([]byte{}),
+			Bucket:      aws.String(s.bucket),
+			Key:         aws.String(lockID),
+			Body:        bytes.NewReader([]byte{}),
+			IfNoneMatch: aws.String("*"),
 		},
 	)
-	if err != nil {
-		return false, nil, k6build.NewWrappedError(ErrLocking, err)
-	}
 
-	release := func(ctx context.Context) error {
-		_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(s.bucket),
-			Key:    aws.String(lockID),
-		})
-		if err != nil {
-			return k6build.NewWrappedError(ErrLocking, err)
+	// we got the lock
+	// TODO refactor into separate function
+	if err == nil {
+		updateCtx, cancelUpdate := context.WithCancel(ctx)
+		// program a periodic update of the lease.
+		// update until the context is done of the ticker is stopped by the release function
+		go func() {
+			ticker := time.NewTicker(s.lease)
+			start := time.Now()
+
+			for {
+				select {
+				case <-updateCtx.Done():
+					ticker.Stop()
+					return
+				case tick := <-ticker.C: // try update
+					// prevent runaway locks. Stop after max lease
+					if tick.Sub(start) > s.maxLease {
+						ticker.Stop()
+						return
+					}
+					_, err = s.client.PutObject(
+						ctx,
+						&s3.PutObjectInput{
+							Bucket:  aws.String(s.bucket),
+							Key:     aws.String(lockID),
+							Body:    bytes.NewReader([]byte{}),
+							IfMatch: lockObject.ETag,
+						},
+					)
+					if err != nil {
+						ticker.Stop()
+						return
+					}
+				}
+			}
+		}()
+
+		// release function releases the global lock
+		release := func(ctx context.Context) error {
+			// stop updates
+			cancelUpdate()
+
+			_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket:  aws.String(s.bucket),
+				Key:     aws.String(lockID),
+				IfMatch: lockObject.ETag,
+			})
+			if err != nil {
+				return k6build.NewWrappedError(ErrLocking, err)
+			}
+			return nil
 		}
-		return nil
-	}
-
-	// we are assuming here that this call returns all the locks for the object
-	// this seems reasonable as these are locks for building the same object
-	// and we are deleting them in most cases
-	result, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(s.bucket),
-		Prefix: aws.String(fmt.Sprintf("%s.lock.", id)),
-	})
-	if err != nil {
-		return false, nil, k6build.NewWrappedError(ErrLocking, err)
-	}
-
-	locks := result.Contents
-	if len(locks) == 1 {
 		return true, release, nil
 	}
 
-	// sort oldest first. Break ties using id
-	sort.Slice(locks, func(i, j int) bool {
-		diff := locks[i].LastModified.Sub(*locks[j].LastModified)
-		if diff < 0 {
-			return true
-		}
+	// check for duplicated object
+	var aerr smithy.APIError
+	if errors.As(err, &aerr) && aerr.ErrorCode() == "PreconditionFailed" {
+		lock, errGet := s.client.GetObjectAttributes(
+			ctx,
+			&s3.GetObjectAttributesInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(lockID),
+				ObjectAttributes: []types.ObjectAttributes{
+					types.ObjectAttributesEtag,
+				},
+			})
 
-		if diff == 0 { // same timestamp, break by id
-			return *locks[i].Key < *locks[j].Key
+		// if the lock still exists and it is expired, try to delete
+		if errGet == nil && time.Since(lock.LastModified.Local()) > s.grace {
+			_, _ = s.client.DeleteObject(
+				ctx,
+				&s3.DeleteObjectInput{
+					Bucket:  aws.String(s.bucket),
+					Key:     aws.String(lockID),
+					IfMatch: lock.ETag,
+				})
 		}
-
-		return false
-	})
-
-	// search for the first lock that is not expired. We use the LastUpdate of the newest (last)
-	// lock to calculate the expiration limit. Any lock older than this limit is considered expired.
-	// We don't use the local time to ensure times are synchronized by s3 clock
-	first := 0
-	last := len(locks) - 1
-	expirationLimit := locks[last].LastModified.Add(-s.lease)
-	for _, l := range locks {
-		// if the lock is not expired we found it
-		if l.LastModified.After(expirationLimit) {
-			break
-		}
-		first++
+		return false, nil, nil
 	}
 
-	// if the first non expired is our lock, return it
-	if *locks[first].Key == lockID {
-		return true, release, nil
-	}
-
-	// we were not successful
-	_ = release(ctx)
-
-	return false, nil, nil
+	return false, nil, k6build.NewWrappedError(ErrLocking, err)
 }

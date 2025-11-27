@@ -12,6 +12,7 @@ import (
 	"github.com/grafana/k6build/pkg/builder"
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/httpserver"
+	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/server"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6build/pkg/store/client"
@@ -182,6 +183,7 @@ type serverConfig struct {
 	enableCgo         bool
 	goEnv             map[string]string
 	port              int
+	buildLock         string
 	s3Bucket          string
 	s3Endpoint        string
 	s3Region          string
@@ -262,9 +264,16 @@ func New() *cobra.Command { //nolint:funlen
 		"http://localhost:9000",
 		"store server url",
 	)
-	cmd.Flags().StringVar(&cfg.s3Bucket, "store-bucket", "", "s3 bucket for storing binaries")
+	cmd.Flags().StringVar(&cfg.s3Bucket, "store-bucket", "", "deprecated. Use s3-bucket")
+	cmd.Flags().StringVar(&cfg.s3Bucket, "s3-bucket", "", "s3 bucket for storing binaries")
 	cmd.Flags().StringVar(&cfg.s3Endpoint, "s3-endpoint", "", "s3 endpoint")
 	cmd.Flags().StringVar(&cfg.s3Region, "s3-region", "", "aws region")
+	cmd.Flags().StringVar(
+		&cfg.buildLock,
+		"build-lock",
+		"local",
+		"lock to prevent concurrent builds: 'local' or 's3' (across instances)",
+	)
 	cmd.Flags().BoolVarP(&cfg.verbose, "verbose", "v", false, "print build process output")
 	cmd.Flags().BoolVarP(&cfg.copyGoEnv, "copy-go-env", "g", true, "copy go environment")
 	cmd.Flags().StringToStringVarP(&cfg.goEnv, "env", "e", nil, "build environment variables")
@@ -315,6 +324,11 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 		return nil, err
 	}
 
+	lock, err := cfg.getLock() //nolint:contextcheck // false positive no context required
+	if err != nil {
+		return nil, err
+	}
+
 	if cfg.goEnv == nil {
 		cfg.goEnv = make(map[string]string)
 	}
@@ -336,6 +350,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 		Catalog:    cfg.catalogURL,
 		Store:      store,
 		Registerer: prometheus.DefaultRegisterer,
+		Lock:       lock,
 	}
 	builder, err := builder.New(ctx, config)
 	if err != nil {
@@ -370,4 +385,23 @@ func (cfg serverConfig) getStore() (store.ObjectStore, error) {
 	}
 
 	return store, nil
+}
+
+func (cfg serverConfig) getLock() (lock.Lock, error) {
+	switch cfg.buildLock {
+	case "local":
+		return lock.NewMemoryLock(), nil
+	case "s3":
+		lock, err := lock.NewS3Lock(lock.S3Config{
+			Bucket:   cfg.s3Bucket,
+			Endpoint: cfg.s3Endpoint,
+			Region:   cfg.s3Region,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating s3 lock %w", err)
+		}
+		return lock, nil
+	default:
+		return nil, fmt.Errorf("invalid lock type: %s", cfg.buildLock)
+	}
 }

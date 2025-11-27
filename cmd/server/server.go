@@ -181,7 +181,6 @@ Note: There are no guarantees the global lock will prevent concurrent builds, bu
 probability of this happing. Given that building the binary is an indenpontent operation, this is
 poses not risk.
 `
- 
 	example = `
 # start the build server using a custom local catalog
 k6build server -c /path/to/catalog.json

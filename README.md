@@ -357,6 +357,27 @@ Liveness Probe
 The server exposes a liveness check at /alive.
 This endpoint returns a response code 200 with an empty body.
 
+Build Lock
+----------
+
+Building a binary is a resource intensive task. The build server uses a lock to prevent 
+concurrent builds of the same binary. By default, it uses a lock that works locally for 
+a build service.
+
+The --build-lock option allows to select a s3-backed global lock that works across
+instances. This lock works by creating a lock object in a s3 bucket, using the conditional
+put to prevent multiple instances creating it. The one creating the lock, holds it. Those that
+failed to acquire the lock will retry periodically until they acquire it.
+
+To ensure the liveness of the process, the owner must uptade its lease of the lock frequently
+(this is done automatically by the lock implementation). If it is fails to do so, after a grace
+period, the lock is released. Also, there's a maximum time it can hold the lock, even if it keeps
+updating it. The s3-lock-* parameters allows to fine-tune this process.
+
+Note: There are no guarantees the global lock will prevent concurrent builds, but it lowers the
+probability of this happing. Given that building the binary is an indenpontent operation, this is
+poses not risk.
+
 
 ```
 k6build server [flags]
@@ -383,21 +404,27 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
 ## Flags
 
 ```
-      --allow-build-semvers         allow building versions with build metadata (e.g v0.0.0+build).
-      --cache-max-age duration      chache max-time for artifacts
-  -c, --catalog string              dependencies catalog. Can be path to a local file or an URL. (default "https://registry.k6.io/catalog.json")
-  -g, --copy-go-env                 copy go environment (default true)
-      --enable-cgo                  enable CGO for building binaries.
-  -e, --env stringToString          build environment variables (default [])
-  -h, --help                        help for server
-  -l, --log-level string            log level (default "INFO")
-  -p, --port int                    port server will listen (default 8000)
-      --s3-endpoint string          s3 endpoint
-      --s3-region string            aws region
-      --shutdown-timeout duration   maximum time to wait for graceful shutdown (default 10s)
-      --store-bucket string         s3 bucket for storing binaries
-      --store-url string            store server url (default "http://localhost:9000")
-  -v, --verbose                     print build process output
+      --allow-build-semvers          allow building versions with build metadata (e.g v0.0.0+build).
+      --build-lock string            lock to prevent concurrent builds: 'local' or 's3' (across instances) (default "local")
+      --cache-max-age duration       chache max-time for artifacts
+  -c, --catalog string               dependencies catalog. Can be path to a local file or an URL. (default "https://registry.k6.io/catalog.json")
+  -g, --copy-go-env                  copy go environment (default true)
+      --enable-cgo                   enable CGO for building binaries.
+  -e, --env stringToString           build environment variables (default [])
+  -h, --help                         help for server
+  -l, --log-level string             log level (default "INFO")
+  -p, --port int                     port server will listen (default 8000)
+      --s3-bucket string             s3 bucket for storing binaries
+      --s3-endpoint string           s3 endpoint
+      --s3-lock-backoff duration     time between retries for acquiring a lock (default 1s)
+      --s3-lock-grace duration       grace period for renewing the lease. If the lock has not been updated before this time, it is considered expired (default 3s)
+      --s3-lock-lease duration       time the lock is granted to the owner. The owner should renew the lock at least once before the lease expires. (default 1s)
+      --s3-lock-max-lease duration   the maximum time a lock can be held. After this time, it is automatically released (default 3s)
+      --s3-region string             aws region
+      --shutdown-timeout duration    maximum time to wait for graceful shutdown (default 10s)
+      --store-bucket string          deprecated. Use s3-bucket
+      --store-url string             store server url (default "http://localhost:9000")
+  -v, --verbose                      print build process output
 ```
 
 ## SEE ALSO

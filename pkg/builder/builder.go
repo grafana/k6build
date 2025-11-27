@@ -137,7 +137,6 @@ func New(_ context.Context, config Config) (*Builder, error) {
 }
 
 // Build builds a custom k6 binary with dependencies
-// TODO: refactor to reduce complexity
 func (b *Builder) Build( //nolint:funlen
 	ctx context.Context,
 	platform string,
@@ -201,7 +200,7 @@ func (b *Builder) Build( //nolint:funlen
 			break
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(b.lockBackoff)
 	}
 
 	artifactBuffer := &bytes.Buffer{}

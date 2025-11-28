@@ -298,6 +298,17 @@ Metrics
 
 The server exposes prometheus metrics at /metrics.
 
+requests_total           The total number of builds requests (counter)
+request_duration_seconds duration of the build request in seconds (histogram)
+                         Buckets: 0.1, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120, 300
+object_store_hits_total  The total number of build requests served from object store (counter)
+builds_total             The total number of builds
+builds_failed_total      The total number of failed builds (counter)
+builds_invalid_total     The total number of builds with invalid parameters (counter).
+                         Includes extension/versions not available and platforms not supported.
+build_duration_seconds   The duration of the build in seconds (histogram)
+                         Buckets: 1, 5, 10, 20, 30, 45, 60, 75, 90, 105, 120, 300
+
 Liveness Probe
 --------------
 

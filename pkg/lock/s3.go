@@ -126,7 +126,7 @@ func (s *S3Lock) Lock(ctx context.Context, id string) (func(context.Context) err
 
 // Try attempts to reserve a lock for a given id. Returns a bool indicating if it could reserve it.
 // If the lock was acquired, returns a function that releases the lock.
-func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context) error, error) { //nolint:funlen
+func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context) error, error) {
 	lockID := fmt.Sprintf("%s.lock", id)
 	lockObject, err := s.client.PutObject(
 		ctx,
@@ -141,40 +141,17 @@ func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context
 	// we got the lock
 	// TODO refactor into separate function
 	if err == nil {
-		updateCtx, cancelUpdate := context.WithCancel(ctx)
 		// program a periodic update of the lease.
-		// update until the context is done of the ticker is stopped by the release function
-		go func() {
-			ticker := time.NewTicker(s.lease)
-			start := time.Now()
-
-			for {
-				select {
-				case <-updateCtx.Done():
-					ticker.Stop()
-					return
-				case tick := <-ticker.C: // try update
-					// prevent runaway locks. Stop after max lease
-					if tick.Sub(start) > s.maxLease {
-						ticker.Stop()
-						return
-					}
-					_, err = s.client.PutObject(
-						ctx,
-						&s3.PutObjectInput{
-							Bucket:  aws.String(s.bucket),
-							Key:     aws.String(lockID),
-							Body:    bytes.NewReader([]byte{}),
-							IfMatch: lockObject.ETag,
-						},
-					)
-					if err != nil {
-						ticker.Stop()
-						return
-					}
-				}
-			}
-		}()
+		updateCtx, cancelUpdate := context.WithCancel(ctx)
+		go updater(
+			updateCtx,
+			s.client,
+			s.bucket,
+			lockID,
+			lockObject.ETag,
+			s.lease,
+			s.maxLease,
+		)
 
 		// release function releases the global lock
 		release := func(ctx context.Context) error {
@@ -221,4 +198,45 @@ func (s *S3Lock) Try(ctx context.Context, id string) (bool, func(context.Context
 	}
 
 	return false, nil, k6build.NewWrappedError(ErrLocking, err)
+}
+
+// update until the context is done of the ticker is stopped by the release function
+func updater(
+	ctx context.Context,
+	client *s3.Client,
+	bucket string,
+	lockID string,
+	lockETag *string,
+	lease time.Duration,
+	maxLease time.Duration,
+) {
+	ticker := time.NewTicker(lease)
+	start := time.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return
+		case tick := <-ticker.C: // try update
+			// prevent runaway locks. Stop after max lease
+			if tick.Sub(start) > maxLease {
+				ticker.Stop()
+				return
+			}
+			_, err := client.PutObject(
+				ctx,
+				&s3.PutObjectInput{
+					Bucket:  aws.String(bucket),
+					Key:     aws.String(lockID),
+					Body:    bytes.NewReader([]byte{}),
+					IfMatch: lockETag,
+				},
+			)
+			if err != nil {
+				ticker.Stop()
+				return
+			}
+		}
+	}
 }

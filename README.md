@@ -76,6 +76,7 @@ TODO: use [k6-operator](https://github.com/grafana/k6-operator) for running the 
 * [k6build remote](#k6build-remote)	 - build a custom k6 using a remote build server
 * [k6build server](#k6build-server)	 - k6 build service
 * [k6build store](#k6build-store)	 - k6build object store server
+* [k6build version](#k6build-version)	 - k6build version
 
 ---
 # k6build local
@@ -229,7 +230,10 @@ API
 
 The server exposes an API for building custom k6 binaries.
 
-The API returns the metadata of the custom binary, including an URL for downloading it,
+Build
+=====
+
+The build endpoint returns the metadata of the custom binary, including an URL for downloading it,
 but does not return the binary itself.
 
 For example
@@ -262,16 +266,43 @@ For example
 Note: The build server disables CGO by default but enables it when a dependency requires it.
       use --enable-cgo=true to enable CGO support by default.
 
+Resolve
+=======
+
+The Resolve operation returns the versions that satisfy the given dependency constrains or
+an error if they cannot be satisfied.
+
+For example
+
+	curl http://localhost:8000/resolve -d \
+	'{
+	  "k6":"v0.50.0",
+	  "dependencies":[
+	    {
+		"name":"k6/x/kubernetes",
+		"constraints":">v0.8.0"
+	    }
+	  ],
+	}' | jq .
+
+	{
+	  "dependencies": {
+	    "k6": "v0.50.0",
+	    "k6/x/kubernetes": "v0.10.0"
+	  },
+	}
+
 
 Metrics
 --------
 
-The server exposes prometheus metrics at /metrics
+The server exposes prometheus metrics at /metrics.
 
 Liveness Probe
 --------------
 
-The server exposes a liveness check at /alive
+The server exposes a liveness check at /alive.
+This endpoint returns a response code 200 with an empty body.
 
 
 ```
@@ -299,20 +330,20 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
 ## Flags
 
 ```
-      --allow-build-semvers   allow building versions with build metadata (e.g v0.0.0+build).
-  -c, --catalog string        dependencies catalog. Can be path to a local file or an URL.
-                               (default "https://registry.k6.io/catalog.json")
-  -g, --copy-go-env           copy go environment (default true)
-      --enable-cgo            enable CGO for building binaries.
-  -e, --env stringToString    build environment variables (default [])
-  -h, --help                  help for server
-  -l, --log-level string      log level (default "INFO")
-  -p, --port int              port server will listen (default 8000)
-      --s3-endpoint string    s3 endpoint
-      --s3-region string      aws region
-      --store-bucket string   s3 bucket for storing binaries
-      --store-url string      store server url (default "http://localhost:9000")
-  -v, --verbose               print build process output
+      --allow-build-semvers         allow building versions with build metadata (e.g v0.0.0+build).
+  -c, --catalog string              dependencies catalog. Can be path to a local file or an URL. (default "https://registry.k6.io/catalog.json")
+  -g, --copy-go-env                 copy go environment (default true)
+      --enable-cgo                  enable CGO for building binaries.
+  -e, --env stringToString          build environment variables (default [])
+  -h, --help                        help for server
+  -l, --log-level string            log level (default "INFO")
+  -p, --port int                    port server will listen (default 8000)
+      --s3-endpoint string          s3 endpoint
+      --s3-region string            aws region
+      --shutdown-timeout duration   maximum time to wait for graceful shutdown (default 10s)
+      --store-bucket string         s3 bucket for storing binaries
+      --store-url string            store server url (default "http://localhost:9000")
+  -v, --verbose                     print build process output
 ```
 
 ## SEE ALSO
@@ -367,12 +398,32 @@ curl http://external.url:9000/store/objectID/download
 ## Flags
 
 ```
-  -d, --download-url string   base url used for downloading objects.
-                              If not specified http://localhost:<port> is used
-  -h, --help                  help for store
-  -l, --log-level string      log level (default "INFO")
-  -p, --port int              port server will listen (default 9000)
-  -c, --store-dir string      object store directory (default "/tmp/k6build/store")
+  -d, --download-url string         base url used for downloading objects.
+                                    If not specified http://localhost:<port> is used
+  -h, --help                        help for store
+  -l, --log-level string            log level (default "INFO")
+  -p, --port int                    port server will listen (default 9000)
+      --shutdown-timeout duration   maximum time to wait for graceful shutdown (default 10s)
+  -c, --store-dir string            object store directory (default "/tmp/k6build/store")
+```
+
+## SEE ALSO
+
+* [k6build](#k6build)	 - Build custom k6 binaries with extensions
+
+---
+# k6build version
+
+k6build version
+
+```
+k6build version [flags]
+```
+
+## Flags
+
+```
+  -h, --help   help for version
 ```
 
 ## SEE ALSO

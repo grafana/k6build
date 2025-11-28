@@ -98,12 +98,13 @@ For example
 Metrics
 --------
 
-The server exposes prometheus metrics at /metrics
+The server exposes prometheus metrics at /metrics.
 
 Liveness Probe
 --------------
 
-The server exposes a liveness check at /alive
+The server exposes a liveness check at /alive.
+This endpoint returns a response code 200 with an empty body.
 `
 
 	example = `

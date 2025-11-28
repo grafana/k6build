@@ -130,25 +130,22 @@ func (b *Builder) Build(
 
 	requestTimer := prometheus.NewTimer(b.metrics.requestTimeHistogram)
 	defer func() {
+		// record time only if request was successful
 		if buildErr == nil {
 			requestTimer.ObserveDuration()
-		}
-
-		// FIXME: this is a temporary solution because the logic has many paths that return
-		// an invalid parameters error and we need to increment the metrics in all of them
-		if errors.Is(buildErr, k6build.ErrInvalidParameters) {
-			b.metrics.buildsInvalidCounter.Inc()
 		}
 	}()
 
 	// check if the platform is valid early to avoid unnecessary work
 	_, err := k6foundry.ParsePlatform(platform)
 	if err != nil {
+		b.metrics.buildsInvalidCounter.Inc()
 		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 	}
 
 	resolved, err := b.resolveDependencies(ctx, k6Constrains, deps)
 	if err != nil {
+		b.metrics.buildsInvalidCounter.Inc()
 		return k6build.Artifact{}, err
 	}
 
@@ -174,16 +171,12 @@ func (b *Builder) Build(
 		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
 	}
 
-	b.metrics.buildCounter.Inc()
-	buildTimer := prometheus.NewTimer(b.metrics.buildTimeHistogram)
-
 	artifactBuffer := &bytes.Buffer{}
 
 	err = b.buildArtifact(ctx, platform, resolved, artifactBuffer)
 	if err != nil {
 		return k6build.Artifact{}, err
 	}
-	buildTimer.ObserveDuration()
 
 	artifactObject, err = b.store.Put(ctx, id, artifactBuffer)
 
@@ -389,11 +382,16 @@ func (b *Builder) buildArtifact(
 		k6Version = build
 	}
 
+	b.metrics.buildCounter.Inc()
+	buildTimer := prometheus.NewTimer(b.metrics.buildTimeHistogram)
+
 	_, err = builder.Build(ctx, buildPlatform, k6Version, mods, nil, []string{}, artifactBuffer)
 	if err != nil {
 		b.metrics.buildsFailedCounter.Inc()
 		return k6build.NewWrappedError(k6build.ErrBuildFailed, err)
 	}
+
+	buildTimer.ObserveDuration()
 
 	// TODO: complete artifact info
 	return nil

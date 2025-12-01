@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	s3test "github.com/grafana/k6build/pkg/s3/test"
+	"github.com/grafana/s3-mock"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -21,7 +21,7 @@ import (
 func setupS3Lock(t *testing.T, conf S3Config) Lock {
 	t.Helper()
 
-	client, terminate, err := s3test.New(t.Context())
+	client, terminate, err := s3mock.New()
 	if err != nil {
 		t.Fatalf("setup s3 client: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestNewS3Lock(t *testing.T) {
 		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
 	}
 
-	client, terminate, err := s3test.New(t.Context())
+	client, terminate, err := s3mock.New()
 	if err != nil {
 		t.Fatalf("setup s3 client: %v", err)
 	}

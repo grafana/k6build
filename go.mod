@@ -1,6 +1,6 @@
 module github.com/grafana/k6build
 
-go 1.24.0
+go 1.24.2
 
 retract (
 	v0.5.7 // corrupted cache
@@ -9,7 +9,6 @@ retract (
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/aws/aws-sdk-go v1.55.8
 	github.com/aws/aws-sdk-go-v2 v1.40.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.3
@@ -17,13 +16,13 @@ require (
 	github.com/aws/smithy-go v1.24.0
 	github.com/docker/go-connections v0.6.0
 	github.com/google/go-cmp v0.7.0
-	github.com/google/uuid v1.6.0
 	github.com/grafana/k6foundry v0.4.7
+	github.com/grafana/s3-mock v0.2.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.40.0
-	golang.org/x/sync v0.15.0
+	golang.org/x/sync v0.18.0
 )
 
 require (
@@ -61,6 +60,7 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect

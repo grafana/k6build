@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	s3test "github.com/grafana/k6build/pkg/s3/test"
+	"github.com/grafana/s3-mock"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -29,7 +29,7 @@ type object struct {
 func setupStore(t *testing.T, preload []object) store.ObjectStore {
 	t.Helper()
 
-	client, terminate, err := s3test.New(t.Context())
+	client, terminate, err := s3mock.New()
 	if err != nil {
 		t.Fatalf("setting up test %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grafana/s3-mock"
+	s3mock "github.com/grafana/s3-mock"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -26,7 +26,7 @@ func setupS3Lock(t *testing.T, conf S3Config) Lock {
 		t.Fatalf("setup s3 client: %v", err)
 	}
 	t.Cleanup(
-		func() { terminate(t.Context()) },
+		func() { terminate(t.Context()) }, //nolint:errcheck
 	)
 
 	bucket := strings.ReplaceAll(strings.ToLower(t.Name()), "_", "-")
@@ -60,7 +60,7 @@ func TestNewS3Lock(t *testing.T) {
 		t.Fatalf("setup s3 client: %v", err)
 	}
 	t.Cleanup(
-		func() { terminate(t.Context()) },
+		func() { terminate(t.Context()) }, //nolint:errcheck
 	)
 
 	testCases := []struct {

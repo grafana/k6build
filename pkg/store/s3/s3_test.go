@@ -13,12 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grafana/s3-mock"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
 	"github.com/grafana/k6build/pkg/store"
+	s3mock "github.com/grafana/s3-mock"
 )
 
 type object struct {
@@ -33,9 +33,9 @@ func setupStore(t *testing.T, preload []object) store.ObjectStore {
 	if err != nil {
 		t.Fatalf("setting up test %v", err)
 	}
-	t.Cleanup(func() {
-		terminate(t.Context())
-	})
+	t.Cleanup(
+		func() { terminate(t.Context()) }, //nolint:errcheck
+	)
 
 	bucket := strings.ReplaceAll(strings.ToLower(t.Name()), "_", "-")
 	_, err = client.CreateBucket(t.Context(), &s3.CreateBucketInput{

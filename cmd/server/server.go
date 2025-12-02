@@ -38,11 +38,17 @@ Build
 The build endpoint returns the metadata of the custom binary, including an URL for downloading it,
 but does not return the binary itself.
 
-For example
+This function is implemented in the /build endpoint, and supports both POST and GET methods.
 
-	curl http://localhost:8000/build -d \
+POST
+
+The POST method expects the build request in the request's body as a JSON object.
+
+Example
+
+	curl -X POST http://localhost:8000/build -d \
 	'{
-	  "k6":"v0.50.0",
+	  "k6":"v1.4.0",
 	  "dependencies":[
 	    {
 		"name":"k6/x/kubernetes",
@@ -57,7 +63,7 @@ For example
 	  "id": "5a241ba6ff643075caadbd06d5a326e5e74f6f10",
 	  "url": "http://localhost:9000/store/5a241ba6ff643075caadbd06d5a326e5e74f6f10/download",
 	  "dependencies": {
-	    "k6": "v0.50.0",
+	    "k6": "v1.4.0",
 	    "k6/x/kubernetes": "v0.10.0"
 	  },
 	  "platform": "linux/amd64",
@@ -65,8 +71,45 @@ For example
 	  }
 	}
 
-Note: The build server disables CGO by default but enables it when a dependency requires it.
-      use --enable-cgo=true to enable CGO support by default.
+GET
+
+The GET method expects the build requests in the query parameters:
+- platform: platform to build the binary for (e.g. linux/arm64). This is required
+- k6: the k6 version constrains (e.g. k6=v1.2.0)
+- dep: a dependency in the form name:version (e.g. dep=k6/x/faker:v0.4.0).
+  Multple dependencies can be defined in a request.
+
+Example
+
+	curl -X GET "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0" | jq .
+
+	{
+	  "artifact": {
+	  "id": "5a241ba6ff643075caadbd06d5a326e5e74f6f10",
+	  "url": "http://localhost:9000/store/5a241ba6ff643075caadbd06d5a326e5e74f6f10/download",
+	  "dependencies": {
+	    "k6": "v1.4.0",
+	    "k6/x/kubernetes": "v0.10.0"
+	  },
+	  "platform": "linux/amd64",
+	  "checksum": "bfdf51ec9279e6d7f91df0a342d0c90ab4990ff1fb0215938505a6894edaf913"
+	  }
+	}
+
+Caching
+
+The GET method can be used to allow caching the build results. This method returns the ETag header with the
+artifact's ID and sets the Cache-Control max-age parameter to the value specified in the --cache-max-age argument.
+
+The ETag will be the same for the same dependencies, regardless of the order of the parameters, but some caching proxies
+rely on the URL. Therefore, to improve cacheability, the parameters should be in a consistent order. We recommend 
+placing first platform, then k6 (if present) and finally the deps in alphabetical order.
+Example: plarform=linux/arm64&k6=v1.2.0&dep=k6/x/faker:v0.4.0&dep=k6/x/kafka:*
+
+Notice that if the requests uses contrains like "*" or ">vx.y.z" for k6 or the dependencies, each build request 
+can potentially return a different artifact if a new version is released. Therefore we recommend not setting the
+max-age to a large value (days) and use instead in the range of a few hours to one day, dependending on how critical
+is to use new versions.
 
 Resolve
 =======
@@ -93,7 +136,6 @@ For example
 	    "k6/x/kubernetes": "v0.10.0"
 	  },
 	}
-
 
 Metrics
 --------
@@ -146,6 +188,7 @@ type serverConfig struct {
 	storeURL          string
 	verbose           bool
 	shutdownTimeout   time.Duration
+	cacheMaxAge       time.Duration
 }
 
 // New creates new cobra command for the server command.
@@ -182,6 +225,7 @@ func New() *cobra.Command { //nolint:funlen
 			apiConfig := server.APIServerConfig{
 				BuildService: buildSrv,
 				Log:          log,
+				CacheMaxAge:  cfg.cacheMaxAge,
 			}
 			buildServer := server.NewAPIServer(apiConfig)
 
@@ -238,6 +282,12 @@ func New() *cobra.Command { //nolint:funlen
 		"shutdown-timeout",
 		10*time.Second,
 		"maximum time to wait for graceful shutdown",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.cacheMaxAge,
+		"cache-max-age",
+		0,
+		"chache max-time for artifacts",
 	)
 
 	return cmd

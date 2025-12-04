@@ -12,6 +12,7 @@ import (
 	"github.com/grafana/k6build/pkg/builder"
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/httpserver"
+	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/server"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6build/pkg/store/client"
@@ -158,8 +159,28 @@ Liveness Probe
 
 The server exposes a liveness check at /alive.
 This endpoint returns a response code 200 with an empty body.
-`
 
+Build Lock
+----------
+
+Building a binary is a resource intensive task. The build server uses a lock to prevent 
+concurrent builds of the same binary. By default, it uses a lock that works locally for 
+a build service.
+
+The --build-lock option allows to select a s3-backed global lock that works across
+instances. This lock works by creating a lock object in a s3 bucket, using the conditional
+put to prevent multiple instances creating it. The one creating the lock, holds it. Those that
+failed to acquire the lock will retry periodically until they acquire it.
+
+To ensure the liveness of the process, the owner must uptade its lease of the lock frequently
+(this is done automatically by the lock implementation). If it is fails to do so, after a grace
+period, the lock is released. Also, there's a maximum time it can hold the lock, even if it keeps
+updating it. The s3-lock-* parameters allows to fine-tune this process.
+
+Note: There are no guarantees the global lock will prevent concurrent builds, but it lowers the
+probability of this happing. Given that building the binary is an indenpontent operation, this is
+poses not risk.
+`
 	example = `
 # start the build server using a custom local catalog
 k6build server -c /path/to/catalog.json
@@ -182,9 +203,14 @@ type serverConfig struct {
 	enableCgo         bool
 	goEnv             map[string]string
 	port              int
+	buildLock         string
 	s3Bucket          string
 	s3Endpoint        string
 	s3Region          string
+	s3LockLease       time.Duration
+	s3LockBackoff     time.Duration
+	s3LockGrace       time.Duration
+	s3LockMaxLease    time.Duration
 	storeURL          string
 	verbose           bool
 	shutdownTimeout   time.Duration
@@ -262,9 +288,16 @@ func New() *cobra.Command { //nolint:funlen
 		"http://localhost:9000",
 		"store server url",
 	)
-	cmd.Flags().StringVar(&cfg.s3Bucket, "store-bucket", "", "s3 bucket for storing binaries")
+	cmd.Flags().StringVar(&cfg.s3Bucket, "store-bucket", "", "deprecated. Use s3-bucket")
+	cmd.Flags().StringVar(&cfg.s3Bucket, "s3-bucket", "", "s3 bucket for storing binaries")
 	cmd.Flags().StringVar(&cfg.s3Endpoint, "s3-endpoint", "", "s3 endpoint")
 	cmd.Flags().StringVar(&cfg.s3Region, "s3-region", "", "aws region")
+	cmd.Flags().StringVar(
+		&cfg.buildLock,
+		"build-lock",
+		"local",
+		"lock to prevent concurrent builds: 'local' or 's3' (across instances)",
+	)
 	cmd.Flags().BoolVarP(&cfg.verbose, "verbose", "v", false, "print build process output")
 	cmd.Flags().BoolVarP(&cfg.copyGoEnv, "copy-go-env", "g", true, "copy go environment")
 	cmd.Flags().StringToStringVarP(&cfg.goEnv, "env", "e", nil, "build environment variables")
@@ -288,6 +321,32 @@ func New() *cobra.Command { //nolint:funlen
 		"cache-max-age",
 		0,
 		"chache max-time for artifacts",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.s3LockLease,
+		"s3-lock-lease",
+		time.Second,
+		"time the lock is granted to the owner. The owner should renew the lock at least"+
+			" once before the lease expires.",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.s3LockGrace,
+		"s3-lock-grace",
+		3*time.Second,
+		"grace period for renewing the lease. If the lock has not been updated before this"+
+			" time, it is considered expired",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.s3LockMaxLease,
+		"s3-lock-max-lease",
+		3*time.Second,
+		"the maximum time a lock can be held. After this time, it is automatically released",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.s3LockBackoff,
+		"s3-lock-backoff",
+		time.Second,
+		"time between retries for acquiring a lock",
 	)
 
 	return cmd
@@ -315,6 +374,11 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 		return nil, err
 	}
 
+	lock, err := cfg.getLock() //nolint:contextcheck // false positive no context required
+	if err != nil {
+		return nil, err
+	}
+
 	if cfg.goEnv == nil {
 		cfg.goEnv = make(map[string]string)
 	}
@@ -336,6 +400,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 		Catalog:    cfg.catalogURL,
 		Store:      store,
 		Registerer: prometheus.DefaultRegisterer,
+		Lock:       lock,
 	}
 	builder, err := builder.New(ctx, config)
 	if err != nil {
@@ -370,4 +435,23 @@ func (cfg serverConfig) getStore() (store.ObjectStore, error) {
 	}
 
 	return store, nil
+}
+
+func (cfg serverConfig) getLock() (lock.Lock, error) {
+	switch cfg.buildLock {
+	case "local":
+		return lock.NewMemoryLock(), nil
+	case "s3":
+		lock, err := lock.NewS3Lock(lock.S3Config{
+			Bucket:   cfg.s3Bucket,
+			Endpoint: cfg.s3Endpoint,
+			Region:   cfg.s3Region,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating s3 lock %w", err)
+		}
+		return lock, nil
+	default:
+		return nil, fmt.Errorf("invalid lock type: %s", cfg.buildLock)
+	}
 }

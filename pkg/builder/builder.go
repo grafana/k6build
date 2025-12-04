@@ -13,10 +13,11 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/catalog"
+	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6foundry"
 
@@ -30,6 +31,8 @@ const (
 	opRe    = `(?<operator>[=|~|>|<|\^|>=|<=|!=]){0,1}(?:\s*)`
 	verRe   = `(?P<version>[v|V](?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))`
 	buildRe = `(?:[+|-|])(?P<build>(?:[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))`
+
+	defaultLockBackoff = time.Second
 )
 
 var (
@@ -70,21 +73,24 @@ type Opts struct {
 
 // Config defines the configuration for a Builder
 type Config struct {
-	Opts       Opts
-	Catalog    string
-	Store      store.ObjectStore
-	Foundry    FoundryFactory
-	Registerer prometheus.Registerer
+	Opts        Opts
+	Catalog     string
+	Store       store.ObjectStore
+	Foundry     FoundryFactory
+	Registerer  prometheus.Registerer
+	Lock        lock.Lock
+	LockBackoff time.Duration
 }
 
 // Builder implements the BuildService interface
 type Builder struct {
-	opts    Opts
-	catalog string
-	store   store.ObjectStore
-	mutexes sync.Map
-	foundry FoundryFactory
-	metrics *metrics
+	opts        Opts
+	catalog     string
+	store       store.ObjectStore
+	foundry     FoundryFactory
+	metrics     *metrics
+	lock        lock.Lock
+	lockBackoff time.Duration
 }
 
 // New returns a new instance of Builder given a BuilderConfig
@@ -110,17 +116,28 @@ func New(_ context.Context, config Config) (*Builder, error) {
 		}
 	}
 
+	buildLock := config.Lock
+	if buildLock == nil {
+		buildLock = lock.NewMemoryLock()
+	}
+
+	lockBackoff := config.LockBackoff
+	if lockBackoff == 0 {
+		lockBackoff = defaultLockBackoff
+	}
 	return &Builder{
-		catalog: config.Catalog,
-		opts:    config.Opts,
-		store:   config.Store,
-		foundry: foundry,
-		metrics: metrics,
+		catalog:     config.Catalog,
+		opts:        config.Opts,
+		store:       config.Store,
+		foundry:     foundry,
+		metrics:     metrics,
+		lock:        buildLock,
+		lockBackoff: lockBackoff,
 	}, nil
 }
 
 // Build builds a custom k6 binary with dependencies
-func (b *Builder) Build(
+func (b *Builder) Build( //nolint:funlen
 	ctx context.Context,
 	platform string,
 	k6Constrains string,
@@ -151,24 +168,39 @@ func (b *Builder) Build(
 
 	id := generateArtifactID(platform, resolved)
 
-	unlock := b.lockArtifact(id)
-	defer unlock()
+	// Try to get the object, if not found, try to acquire a build lock.
+	// If the build lock is not acquired, assume some other builder is building the binary.
+	// Sleep and retry.
+	var artifactObject store.Object
+	for {
+		artifactObject, err = b.store.Get(ctx, id)
+		if err == nil {
+			b.metrics.storeHitsCounter.Inc()
 
-	artifactObject, err := b.store.Get(ctx, id)
-	if err == nil {
-		b.metrics.storeHitsCounter.Inc()
+			return k6build.Artifact{
+				ID:           id,
+				Checksum:     artifactObject.Checksum,
+				URL:          artifactObject.URL,
+				Dependencies: resolvedVersions(resolved),
+				Platform:     platform,
+			}, nil
+		}
 
-		return k6build.Artifact{
-			ID:           id,
-			Checksum:     artifactObject.Checksum,
-			URL:          artifactObject.URL,
-			Dependencies: resolvedVersions(resolved),
-			Platform:     platform,
-		}, nil
-	}
+		if !errors.Is(err, store.ErrObjectNotFound) {
+			return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+		}
 
-	if !errors.Is(err, store.ErrObjectNotFound) {
-		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+		acquired, unlock, err := b.lock.Try(ctx, id)
+		if err != nil {
+			return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+		}
+
+		if acquired {
+			defer unlock(ctx) //nolint:errcheck
+			break
+		}
+
+		time.Sleep(b.lockBackoff)
 	}
 
 	artifactBuffer := &bytes.Buffer{}
@@ -255,22 +287,6 @@ func (b *Builder) resolveDependencies(
 	}
 
 	return resolved, nil
-}
-
-// lockArtifact obtains a mutex used to prevent concurrent builds of the same artifact and
-// returns a function that will unlock the mutex associated to the given id in the object store.
-// The lock is also removed from the map. Subsequent calls will get another lock on the same
-// id but this is safe as the object should already be in the object store and no further
-// builds are needed.
-func (b *Builder) lockArtifact(id string) func() {
-	value, _ := b.mutexes.LoadOrStore(id, &sync.Mutex{})
-	mtx, _ := value.(*sync.Mutex)
-	mtx.Lock()
-
-	return func() {
-		b.mutexes.Delete(id)
-		mtx.Unlock()
-	}
 }
 
 // hasBuildMetadata checks if the constrain references a version with a build metadata.

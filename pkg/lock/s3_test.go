@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -50,10 +49,6 @@ func setupS3Lock(t *testing.T, conf S3Config) Lock {
 
 func TestNewS3Lock(t *testing.T) {
 	t.Parallel()
-
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
 
 	client, terminate, err := s3mock.New()
 	if err != nil {
@@ -115,10 +110,6 @@ func TestNewS3Lock(t *testing.T) {
 func TestS3Lock_BasicLocking(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
-
 	lock := setupS3Lock(t, S3Config{})
 
 	// Test basic lock acquisition and release
@@ -147,10 +138,6 @@ func TestS3Lock_BasicLocking(t *testing.T) {
 
 func TestS3Lock_MultipleLocks(t *testing.T) {
 	t.Parallel()
-
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
 
 	lock := setupS3Lock(t, S3Config{})
 
@@ -184,10 +171,6 @@ func TestS3Lock_MultipleLocks(t *testing.T) {
 
 func TestS3Lock_Concurrent(t *testing.T) {
 	t.Parallel()
-
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
 
 	conf := S3Config{
 		Lease:   500 * time.Millisecond,
@@ -231,10 +214,6 @@ func TestS3Lock_Concurrent(t *testing.T) {
 func TestS3Lock_ExpiredLock(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
-
 	conf := S3Config{
 		Lease:    100 * time.Millisecond,
 		Backoff:  100 * time.Millisecond,
@@ -266,10 +245,6 @@ func TestS3Lock_ExpiredLock(t *testing.T) {
 
 func TestS3Lock_CancelContext(t *testing.T) {
 	t.Parallel()
-
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test: localstack test container is failing in darwin and windows")
-	}
 
 	conf := S3Config{
 		Lease:   100 * time.Millisecond,

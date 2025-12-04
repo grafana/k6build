@@ -375,7 +375,7 @@ period, the lock is released. Also, there's a maximum time it can hold the lock,
 updating it. The s3-lock-* parameters allows to fine-tune this process.
 
 Note: There are no guarantees the global lock will prevent concurrent builds, but it lowers the
-probability of this happing. Given that building the binary is an indenpontent operation, this is
+probability of this happing. Given that building the binary is an indenpontent operation, this
 poses not risk.
 
 
@@ -417,7 +417,7 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
       --s3-bucket string             s3 bucket for storing binaries
       --s3-endpoint string           s3 endpoint
       --s3-lock-backoff duration     time between retries for acquiring a lock (default 1s)
-      --s3-lock-grace duration       grace period for renewing the lease. If the lock has not been updated before this time, it is considered expired (default 3s)
+      --s3-lock-grace duration       grace period for renewing the lease. If the lock has not been updated before this time, it is considered expired (default 10s)
       --s3-lock-lease duration       time the lock is granted to the owner. The owner should renew the lock at least once before the lease expires. (default 1s)
       --s3-lock-max-lease duration   the maximum time a lock can be held. After this time, it is automatically released (default 3s)
       --s3-region string             aws region

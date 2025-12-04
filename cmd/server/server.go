@@ -178,7 +178,7 @@ period, the lock is released. Also, there's a maximum time it can hold the lock,
 updating it. The s3-lock-* parameters allows to fine-tune this process.
 
 Note: There are no guarantees the global lock will prevent concurrent builds, but it lowers the
-probability of this happing. Given that building the binary is an indenpontent operation, this is
+probability of this happing. Given that building the binary is an indenpontent operation, this
 poses not risk.
 `
 	example = `
@@ -332,7 +332,7 @@ func New() *cobra.Command { //nolint:funlen
 	cmd.Flags().DurationVar(
 		&cfg.s3LockGrace,
 		"s3-lock-grace",
-		3*time.Second,
+		10*time.Second,
 		"grace period for renewing the lease. If the lock has not been updated before this"+
 			" time, it is considered expired",
 	)

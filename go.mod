@@ -19,7 +19,7 @@ require (
 	github.com/grafana/k6foundry v0.4.7
 	github.com/grafana/s3-mock v0.2.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/testcontainers/testcontainers-go/modules/localstack v0.40.0
 	golang.org/x/sync v0.18.0

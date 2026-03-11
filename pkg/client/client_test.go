@@ -191,6 +191,14 @@ func TestBuild(t *testing.T) {
 			expectErr: nil,
 		},
 		{
+			title: "test retry on internal server error",
+			handler: handlerChain(
+				unreliable(http.StatusInternalServerError, 1),
+				response(http.StatusOK, api.BuildResponse{}),
+			),
+			expectErr: nil,
+		},
+		{
 			title: "test we don't retry forever",
 			handler: handlerChain(
 				unreliable(http.StatusServiceUnavailable, 10),

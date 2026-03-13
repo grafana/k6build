@@ -30,9 +30,9 @@ type Object struct {
 
 func (o Object) String() string {
 	buffer := &bytes.Buffer{}
-	buffer.WriteString(fmt.Sprintf("id: %s", o.ID))
-	buffer.WriteString(fmt.Sprintf(" checksum: %s", o.Checksum))
-	buffer.WriteString(fmt.Sprintf("url: %s", o.URL))
+	fmt.Fprintf(buffer, "id: %s", o.ID)
+	fmt.Fprintf(buffer, " checksum: %s", o.Checksum)
+	fmt.Fprintf(buffer, "url: %s", o.URL)
 
 	return buffer.String()
 }

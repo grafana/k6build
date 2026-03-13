@@ -36,10 +36,10 @@ func Download(ctx context.Context, client *http.Client, object store.Object) (io
 			return nil, err
 		}
 
-		objectFile, err := os.Open(objectPath) //nolint:gosec // path is sanitized
+		objectFile, err := os.Open(objectPath) //nolint:gosec,forbidigo // path is sanitized
 		if err != nil {
 			// FIXME: is the path has invalid characters, still will return ErrNotExists
-			if errors.Is(err, os.ErrNotExist) {
+			if errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
 				return nil, store.ErrObjectNotFound
 			}
 			return nil, k6build.NewWrappedError(store.ErrAccessingObject, err)
@@ -52,7 +52,7 @@ func Download(ctx context.Context, client *http.Client, object store.Object) (io
 			return nil, k6build.NewWrappedError(store.ErrAccessingObject, err)
 		}
 
-		resp, err := client.Do(req)
+		resp, err := client.Do(req) //nolint:gosec
 		if err != nil {
 			return nil, k6build.NewWrappedError(store.ErrAccessingObject, err)
 		}

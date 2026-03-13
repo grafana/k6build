@@ -34,11 +34,11 @@ type mockFoundry struct {
 func (m *mockFoundry) Build(
 	_ context.Context,
 	platform k6foundry.Platform,
-	k6Version string,
+	_ string,
 	mods []k6foundry.Module,
-	reps []k6foundry.Module,
-	buildOpts []string,
-	out io.Writer,
+	_ []k6foundry.Module,
+	_ []string,
+	_ io.Writer,
 ) (*k6foundry.BuildInfo, error) {
 	modVersions := make(map[string]string)
 	for _, mod := range mods {
@@ -114,7 +114,6 @@ func TestBuild(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -197,7 +196,6 @@ func TestResolve(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -411,10 +409,7 @@ func TestConcurrentBuilds(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	for _, b := range builds {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			if _, err := buildsrv.Build(
 				context.TODO(),
 				"linux/amd64",
@@ -423,7 +418,7 @@ func TestConcurrentBuilds(t *testing.T) {
 			); err != nil {
 				errch <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -435,29 +430,29 @@ func TestConcurrentBuilds(t *testing.T) {
 	}
 }
 
-// templates for producing metric text output
-var metricTemplates = map[string]string{
-	"k6build_requests_total": `
+func TestMetrics(t *testing.T) {
+	t.Parallel()
+
+	// templates for producing metric text output
+	metricTemplates := map[string]string{
+		"k6build_requests_total": `
 # HELP k6build_requests_total The total number of builds requests
 # TYPE k6build_requests_total counter
 k6build_requests_total %s`,
-	"k6build_builds_total": `
+		"k6build_builds_total": `
 # HELP k6build_builds_total The total number of builds
 # HELP k6build_builds_total
 # TYPE k6build_builds_total counter
 k6build_builds_total %s`,
-	"k6build_builds_failed_total": `
+		"k6build_builds_failed_total": `
 # HELP k6build_builds_failed_total The total number of failed builds
 # TYPE k6build_builds_failed_total counter
 k6build_builds_failed_total %s`,
-	"k6build_builds_invalid_total": `
+		"k6build_builds_invalid_total": `
 # HELP k6build_builds_invalid_total The total number of builds with invalid parameters
 # TYPE k6build_builds_invalid_total counter
 k6build_builds_invalid_total %s`,
-}
-
-func TestMetrics(t *testing.T) {
-	t.Parallel()
+	}
 
 	testCases := []struct {
 		title    string
@@ -546,7 +541,7 @@ func TestMetrics(t *testing.T) {
 			text := strings.Builder{}
 			for metric, expected := range tc.expected {
 				metrics = append(metrics, metric)
-				text.Write([]byte(fmt.Sprintf(metricTemplates[metric], expected)))
+				fmt.Fprintf(&text, metricTemplates[metric], expected)
 			}
 			text.Write([]byte("\n"))
 

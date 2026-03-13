@@ -57,8 +57,8 @@ type noCacheMockBuilder struct {
 func (m *noCacheMockBuilder) Build(
 	ctx context.Context,
 	platform string,
-	k6Constrains string,
-	deps []k6build.Dependency,
+	_ string,
+	_ []k6build.Dependency,
 ) (k6build.Artifact, error) {
 	nc := api.NoCache(ctx)
 	*m.noCache = nc
@@ -70,9 +70,9 @@ func (m *noCacheMockBuilder) Build(
 }
 
 func (m *noCacheMockBuilder) Resolve(
-	ctx context.Context,
-	k6Constrains string,
-	deps []k6build.Dependency,
+	_ context.Context,
+	_ string,
+	_ []k6build.Dependency,
 ) (map[string]string, error) {
 	return m.deps, nil
 }
@@ -382,7 +382,6 @@ func TestBuildPostNoCache(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -409,7 +408,12 @@ func TestBuildPostNoCache(t *testing.T) {
 			}
 
 			u, _ := url.Parse(apiserver.URL)
-			resp, err := http.Post(u.JoinPath("build").String(), "application/json", body)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, u.JoinPath("build").String(), body)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("making request %v", err)
 			}
@@ -459,7 +463,6 @@ func TestBuildGetNoCache(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -483,7 +486,11 @@ func TestBuildGetNoCache(t *testing.T) {
 				queryParams.Add("nocache", tc.nocacheVal)
 			}
 
-			resp, err := http.Get(u.String() + "?" + queryParams.Encode())
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, u.String()+"?"+queryParams.Encode(), nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("making request %v", err)
 			}

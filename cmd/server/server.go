@@ -116,7 +116,8 @@ Example
 
 Force a rebuild bypassing the cache:
 
-	curl -X GET "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0&nocache=true" | jq .
+	curl -X GET \
+	  "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0&nocache=true" | jq .
 
 Caching
 

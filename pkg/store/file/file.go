@@ -125,7 +125,7 @@ func (f *Store) Get(_ context.Context, id string) (store.Object, error) {
 	checksum, err := os.ReadFile(filepath.Join(objectDir, "checksum")) //nolint:gosec,forbidigo
 	if err != nil {
 		// directory exists but checksum not yet written — treat as not found
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
 			return store.Object{}, fmt.Errorf("%w (%s)", store.ErrObjectNotFound, id)
 		}
 		return store.Object{}, k6build.NewWrappedError(store.ErrAccessingObject, err)

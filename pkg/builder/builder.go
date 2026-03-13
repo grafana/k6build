@@ -45,7 +45,7 @@ var (
 
 	constrainRe = regexp.MustCompile(opRe + verRe + buildRe)
 
-	tracer = otel.Tracer("github.com/grafana/k6build/pkg/builder")
+	tracer = otel.Tracer("github.com/grafana/k6build/pkg/builder") //nolint:gochecknoglobals
 )
 
 // GoOpts defines the options for the go build environment
@@ -143,7 +143,7 @@ func New(_ context.Context, config Config) (*Builder, error) {
 }
 
 // Build builds a custom k6 binary with dependencies
-func (b *Builder) Build( //nolint:funlen,cyclop
+func (b *Builder) Build( //nolint:funlen
 	ctx context.Context,
 	platform string,
 	k6Constrains string,

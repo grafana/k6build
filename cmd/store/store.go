@@ -49,7 +49,7 @@ curl http://external.url:9000/store/objectID/download
 )
 
 // New creates new cobra command for store command.
-func New() *cobra.Command {
+func New() *cobra.Command { //nolint:funlen
 	var (
 		storeDir        string
 		storeSrvURL     string

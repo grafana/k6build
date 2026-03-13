@@ -22,6 +22,10 @@ import (
 	"github.com/grafana/k6foundry"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -40,6 +44,8 @@ var (
 	ErrInitializingBuilder   = errors.New("initializing builder")
 
 	constrainRe = regexp.MustCompile(opRe + verRe + buildRe)
+
+	tracer = otel.Tracer("github.com/grafana/k6build/pkg/builder") //nolint:gochecknoglobals
 )
 
 // GoOpts defines the options for the go build environment
@@ -143,6 +149,19 @@ func (b *Builder) Build( //nolint:funlen
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (artifact k6build.Artifact, buildErr error) {
+	ctx, span := tracer.Start(ctx, "Builder.Build", trace.WithAttributes(
+		attribute.String("k6build.platform", platform),
+		attribute.String("k6build.k6_constrains", k6Constrains),
+		attribute.Int("k6build.deps_count", len(deps)),
+	))
+	defer func() {
+		if buildErr != nil {
+			span.RecordError(buildErr)
+			span.SetStatus(codes.Error, buildErr.Error())
+		}
+		span.End()
+	}()
+
 	b.metrics.requestCounter.Inc()
 
 	requestTimer := prometheus.NewTimer(b.metrics.requestTimeHistogram)
@@ -167,6 +186,7 @@ func (b *Builder) Build( //nolint:funlen
 	}
 
 	id := generateArtifactID(platform, resolved)
+	span.SetAttributes(attribute.String("k6build.artifact_id", id))
 
 	// Try to get the object, if not found, try to acquire a build lock.
 	// If the build lock is not acquired, assume some other builder is building the binary.
@@ -176,6 +196,7 @@ func (b *Builder) Build( //nolint:funlen
 		artifactObject, err = b.store.Get(ctx, id)
 		if err == nil {
 			b.metrics.storeHitsCounter.Inc()
+			span.SetAttributes(attribute.Bool("k6build.cache_hit", true))
 
 			return k6build.Artifact{
 				ID:           id,
@@ -249,6 +270,9 @@ func (b *Builder) resolveDependencies(
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (map[string]catalog.Module, error) {
+	ctx, span := tracer.Start(ctx, "Builder.resolveDependencies")
+	defer span.End()
+
 	ctlg, err := catalog.NewCatalog(ctx, b.catalog)
 	if err != nil {
 		return nil, k6build.NewWrappedError(k6build.ErrCatalog, err)
@@ -351,6 +375,11 @@ func (b *Builder) buildArtifact(
 	deps map[string]catalog.Module,
 	artifactBuffer io.Writer,
 ) error {
+	ctx, span := tracer.Start(ctx, "Builder.buildArtifact", trace.WithAttributes(
+		attribute.String("k6build.platform", platform),
+	))
+	defer span.End()
+
 	// already checked the platform is valid, should be safe to ignore the error
 	buildPlatform, _ := k6foundry.ParsePlatform(platform)
 

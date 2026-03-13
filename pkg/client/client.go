@@ -15,6 +15,8 @@ import (
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/api"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // ErrInvalidConfiguration signals an error in the configuration
@@ -65,7 +67,9 @@ func NewBuildServiceClient(config BuildServiceClientConfig) (k6build.BuildServic
 
 	client := config.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		}
 	}
 	return &BuildClient{
 		srvURL:   srvURL,

@@ -10,6 +10,7 @@ import (
 	"github.com/grafana/k6build/pkg/httpserver"
 	"github.com/grafana/k6build/pkg/store/file"
 	"github.com/grafana/k6build/pkg/store/server"
+	"github.com/grafana/k6build/pkg/tracing"
 	"github.com/grafana/k6build/pkg/util"
 
 	"github.com/spf13/cobra"
@@ -48,13 +49,14 @@ curl http://external.url:9000/store/objectID/download
 )
 
 // New creates new cobra command for store command.
-func New() *cobra.Command {
+func New() *cobra.Command { //nolint:funlen
 	var (
 		storeDir        string
 		storeSrvURL     string
 		port            int
 		logLevel        string
 		shutdownTimeout time.Duration
+		otelEndpoint    string
 	)
 
 	cmd := &cobra.Command{
@@ -67,6 +69,15 @@ func New() *cobra.Command {
 		// this is needed to prevent cobra to print errors reported by subcommands in the stderr
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			shutdownTracer, err := tracing.Setup(cmd.Context(), tracing.Config{
+				Endpoint:    otelEndpoint,
+				ServiceName: "k6build-store",
+			})
+			if err != nil {
+				return fmt.Errorf("setting up tracing: %w", err)
+			}
+			defer shutdownTracer(cmd.Context()) //nolint:errcheck
+
 			// set log
 			ll, err := util.ParseLogLevel(logLevel)
 			if err != nil {
@@ -129,6 +140,12 @@ func New() *cobra.Command {
 		"shutdown-timeout",
 		10*time.Second,
 		"maximum time to wait for graceful shutdown",
+	)
+	cmd.Flags().StringVar(
+		&otelEndpoint,
+		"otel-endpoint",
+		"",
+		"OTLP gRPC endpoint for traces (e.g. localhost:4317). If empty, tracing is disabled.",
 	)
 
 	return cmd

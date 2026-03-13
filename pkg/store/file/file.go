@@ -52,10 +52,7 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 
 	objectDir := filepath.Join(f.dir, id)
 
-	if _, err := os.Stat(objectDir); !errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
-		return store.Object{}, fmt.Errorf("%w: %q", store.ErrDuplicateObject, id)
-	}
-
+	// create the directory first so the lock file can be placed inside it
 	// TODO: check permissions
 	err := os.MkdirAll(objectDir, 0o750) //nolint:forbidigo
 	if err != nil {
@@ -68,6 +65,11 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 		return store.Object{}, k6build.NewWrappedError(store.ErrCreatingObject, err)
 	}
 	defer unlock()
+
+	// check for duplicate after acquiring the lock to avoid TOCTOU races
+	if _, err := os.Stat(filepath.Join(objectDir, "checksum")); !errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
+		return store.Object{}, fmt.Errorf("%w: %q", store.ErrDuplicateObject, id)
+	}
 
 	objectFile, err := os.Create(filepath.Join(objectDir, "data")) //nolint:gosec,forbidigo
 	if err != nil {
@@ -122,6 +124,10 @@ func (f *Store) Get(_ context.Context, id string) (store.Object, error) {
 
 	checksum, err := os.ReadFile(filepath.Join(objectDir, "checksum")) //nolint:gosec,forbidigo
 	if err != nil {
+		// directory exists but checksum not yet written — treat as not found
+		if errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
+			return store.Object{}, fmt.Errorf("%w (%s)", store.ErrObjectNotFound, id)
+		}
 		return store.Object{}, k6build.NewWrappedError(store.ErrAccessingObject, err)
 	}
 

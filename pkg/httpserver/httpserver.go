@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -100,7 +101,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	srv := http.Server{
 		Addr:              fmt.Sprintf(":%d", s.port),
-		Handler:           s.srv,
+		Handler:           otelhttp.NewHandler(s.srv, "k6build"),
 		ReadHeaderTimeout: s.readHeaderTimeout,
 	}
 

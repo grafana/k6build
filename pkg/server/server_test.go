@@ -48,6 +48,35 @@ func (m mockBuilder) Resolve(
 	return m.deps, nil
 }
 
+// noCacheMockBuilder records whether nocache was set in the context
+type noCacheMockBuilder struct {
+	noCache *bool
+	deps    map[string]string
+}
+
+func (m *noCacheMockBuilder) Build(
+	ctx context.Context,
+	platform string,
+	k6Constrains string,
+	deps []k6build.Dependency,
+) (k6build.Artifact, error) {
+	nc := api.NoCache(ctx)
+	*m.noCache = nc
+
+	return k6build.Artifact{
+		Platform:     platform,
+		Dependencies: m.deps,
+	}, nil
+}
+
+func (m *noCacheMockBuilder) Resolve(
+	ctx context.Context,
+	k6Constrains string,
+	deps []k6build.Dependency,
+) (map[string]string, error) {
+	return m.deps, nil
+}
+
 func TestBuild(t *testing.T) {
 	t.Parallel()
 
@@ -316,6 +345,147 @@ func TestResolve(t *testing.T) {
 			}()
 
 			assertAPIResponse(t, resp, tc.expectStatus, tc.expectErr, tc.resp, tc.expectReponse)
+		})
+	}
+}
+
+func TestBuildPostNoCache(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		title       string
+		noCache     bool
+		expectCache bool
+	}{
+		{
+			title:       "nocache not set",
+			noCache:     false,
+			expectCache: false,
+		},
+		{
+			title:       "nocache set to true",
+			noCache:     true,
+			expectCache: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.title, func(t *testing.T) {
+			t.Parallel()
+
+			var gotNoCache bool
+			mock := &noCacheMockBuilder{
+				noCache: &gotNoCache,
+				deps:    map[string]string{"k6": "v0.1.0"},
+			}
+			config := APIServerConfig{
+				BuildService: mock,
+			}
+			apiserver := httptest.NewServer(NewAPIServer(config))
+			defer apiserver.Close()
+
+			buildReq := api.BuildRequest{
+				Platform:     "linux/amd64",
+				K6Constrains: "v0.1.0",
+				NoCache:      tc.noCache,
+			}
+			body := &bytes.Buffer{}
+			err := json.NewEncoder(body).Encode(buildReq)
+			if err != nil {
+				t.Fatalf("encoding request %v", err)
+			}
+
+			u, _ := url.Parse(apiserver.URL)
+			resp, err := http.Post(u.JoinPath("build").String(), "application/json", body)
+			if err != nil {
+				t.Fatalf("making request %v", err)
+			}
+			defer func() {
+				_ = resp.Body.Close()
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			if gotNoCache != tc.expectCache {
+				t.Fatalf("expected nocache=%v in context, got %v", tc.expectCache, gotNoCache)
+			}
+		})
+	}
+}
+
+func TestBuildGetNoCache(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		title       string
+		nocacheVal  string
+		expectCache bool
+	}{
+		{
+			title:       "nocache not set",
+			nocacheVal:  "",
+			expectCache: false,
+		},
+		{
+			title:       "nocache set to true",
+			nocacheVal:  "true",
+			expectCache: true,
+		},
+		{
+			title:       "nocache set to false",
+			nocacheVal:  "false",
+			expectCache: false,
+		},
+		{
+			title:       "nocache set to invalid value",
+			nocacheVal:  "yes",
+			expectCache: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.title, func(t *testing.T) {
+			t.Parallel()
+
+			var gotNoCache bool
+			mock := &noCacheMockBuilder{
+				noCache: &gotNoCache,
+				deps:    map[string]string{"k6": "v0.1.0"},
+			}
+			config := APIServerConfig{
+				BuildService: mock,
+			}
+			apiserver := httptest.NewServer(NewAPIServer(config))
+			defer apiserver.Close()
+
+			u, _ := url.Parse(apiserver.URL)
+			u = u.JoinPath("build")
+			queryParams := url.Values{}
+			queryParams.Add("platform", "linux/amd64")
+			queryParams.Add("k6", "v0.1.0")
+			if tc.nocacheVal != "" {
+				queryParams.Add("nocache", tc.nocacheVal)
+			}
+
+			resp, err := http.Get(u.String() + "?" + queryParams.Encode())
+			if err != nil {
+				t.Fatalf("making request %v", err)
+			}
+			defer func() {
+				_ = resp.Body.Close()
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			if gotNoCache != tc.expectCache {
+				t.Fatalf("expected nocache=%v in context, got %v", tc.expectCache, gotNoCache)
+			}
 		})
 	}
 }

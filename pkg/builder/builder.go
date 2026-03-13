@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/grafana/k6build"
+	"github.com/grafana/k6build/pkg/api"
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/store"
@@ -171,23 +172,27 @@ func (b *Builder) Build( //nolint:funlen
 	// Try to get the object, if not found, try to acquire a build lock.
 	// If the build lock is not acquired, assume some other builder is building the binary.
 	// Sleep and retry.
+	// If nocache is set, skip the cache lookup and go straight to building.
+	noCache := api.NoCache(ctx)
 	var artifactObject store.Object
 	for {
-		artifactObject, err = b.store.Get(ctx, id)
-		if err == nil {
-			b.metrics.storeHitsCounter.Inc()
+		if !noCache {
+			artifactObject, err = b.store.Get(ctx, id)
+			if err == nil {
+				b.metrics.storeHitsCounter.Inc()
 
-			return k6build.Artifact{
-				ID:           id,
-				Checksum:     artifactObject.Checksum,
-				URL:          artifactObject.URL,
-				Dependencies: resolvedVersions(resolved),
-				Platform:     platform,
-			}, nil
-		}
+				return k6build.Artifact{
+					ID:           id,
+					Checksum:     artifactObject.Checksum,
+					URL:          artifactObject.URL,
+					Dependencies: resolvedVersions(resolved),
+					Platform:     platform,
+				}, nil
+			}
 
-		if !errors.Is(err, store.ErrObjectNotFound) {
-			return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+			if !errors.Is(err, store.ErrObjectNotFound) {
+				return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
+			}
 		}
 
 		acquired, unlock, err := b.lock.Try(ctx, id)

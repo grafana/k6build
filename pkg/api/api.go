@@ -28,6 +28,7 @@ type BuildRequest struct {
 	K6Constrains string               `json:"k6,omitempty"`
 	Dependencies []k6build.Dependency `json:"dependencies,omitempty"`
 	Platform     string               `json:"platform,omitempty"`
+	NoCache      bool                 `json:"nocache,omitempty"`
 }
 
 // BuildResponse defines the response for a BuildRequest

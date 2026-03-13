@@ -58,15 +58,15 @@ func (a Artifact) PrintSummary() string {
 func (a Artifact) toString(details bool, sep string) string {
 	buffer := &bytes.Buffer{}
 	if details {
-		buffer.WriteString(fmt.Sprintf("id: %s%s", a.ID, sep))
+		fmt.Fprintf(buffer, "id: %s%s", a.ID, sep)
 	}
-	buffer.WriteString(fmt.Sprintf("platform: %s%s", a.Platform, sep))
+	fmt.Fprintf(buffer, "platform: %s%s", a.Platform, sep)
 	for dep, version := range a.Dependencies {
-		buffer.WriteString(fmt.Sprintf("%s:%q%s", dep, version, sep))
+		fmt.Fprintf(buffer, "%s:%q%s", dep, version, sep)
 	}
-	buffer.WriteString(fmt.Sprintf("checksum: %s%s", a.Checksum, sep))
+	fmt.Fprintf(buffer, "checksum: %s%s", a.Checksum, sep)
 	if details {
-		buffer.WriteString(fmt.Sprintf("url: %s%s", a.URL, sep))
+		fmt.Fprintf(buffer, "url: %s%s", a.URL, sep)
 	}
 	return buffer.String()
 }

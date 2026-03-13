@@ -42,7 +42,7 @@ func TestDownload(t *testing.T) {
 	}
 
 	for _, o := range objects {
-		if err := os.WriteFile(filepath.Join(storeDir, o.id), o.content, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(storeDir, o.id), o.content, 0o600); err != nil { //nolint:forbidigo
 			t.Fatalf("test setup %v", err)
 		}
 	}
@@ -93,7 +93,6 @@ func TestDownload(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 

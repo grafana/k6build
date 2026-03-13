@@ -92,7 +92,7 @@ func response(status int, response any) requestHandler {
 // fail with the given error up to a number of times
 func unreliable(status int, failures int) requestHandler {
 	requests := 0
-	return func(w http.ResponseWriter, r *http.Request) bool {
+	return func(w http.ResponseWriter, _ *http.Request) bool {
 		requests++
 		if requests <= failures {
 			w.WriteHeader(status)
@@ -271,7 +271,6 @@ func TestResolve(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 

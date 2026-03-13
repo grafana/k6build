@@ -20,7 +20,7 @@ func Download(ctx context.Context, url string, output string) error {
 	if err != nil {
 		return fmt.Errorf("%w %w", ErrDownloadFailed, err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("%w %w", ErrDownloadFailed, err)
 	}
@@ -32,9 +32,9 @@ func Download(ctx context.Context, url string, output string) error {
 		_ = resp.Body.Close()
 	}()
 
-	outFile, err := os.OpenFile( //nolint:gosec
+	outFile, err := os.OpenFile( //nolint:gosec,forbidigo
 		output,
-		os.O_TRUNC|os.O_WRONLY|os.O_CREATE,
+		os.O_TRUNC|os.O_WRONLY|os.O_CREATE, //nolint:forbidigo
 		syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IWUSR,
 	)
 	if err != nil {

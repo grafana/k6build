@@ -14,6 +14,6 @@ func main() {
 	err := root.Execute()
 	if err != nil {
 		fmt.Printf("%s\n", err.Error())
-		os.Exit(1)
+		os.Exit(1) //nolint:forbidigo
 	}
 }

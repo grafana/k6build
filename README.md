@@ -65,6 +65,35 @@ The following sections describe different usage scenarios.
 
 TODO: use [k6-operator](https://github.com/grafana/k6-operator) for running the tests using a custom image.
 
+## Releasing
+
+The release process for k6build involves tagging, building a Docker image, and creating a GitHub release.
+
+### 1. Create and push a tag
+
+Create an annotated tag following semantic versioning with a `v` prefix and push it:
+
+```bash
+git tag -a v0.5.0 -m "Release v0.5.0"
+git push origin v0.5.0
+```
+
+### 2. Docker image build (automatic)
+
+Pushing the tag triggers the [publish workflow](.github/workflows/release.yaml), which builds and pushes a multi-architecture (`linux/amd64`, `linux/arm64`) Docker image to `ghcr.io/grafana/k6build:<tag>`.
+
+Pushes to `main` (without a tag) publish the image as `ghcr.io/grafana/k6build:latest`.
+
+### 3. Create a GitHub release (manual)
+
+After the CI workflow completes, manually create a GitHub release for the tag:
+
+1. Go to the repository's **Releases** page.
+2. Click **Draft a new release**.
+3. Select the tag you just pushed.
+4. Add release notes describing the changes.
+5. Publish the release.
+
 <!-- #region cli -->
 # k6build
 

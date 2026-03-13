@@ -38,16 +38,16 @@ type BuildResponse struct {
 	// to know the type of error, and use Unwrap to obtain its cause if available.
 	Error *k6build.WrappedError `json:"error,omitempty"`
 	// Artifact metadata. If an error occurred, content is undefined
-	Artifact k6build.Artifact `json:"artifact,omitempty"`
+	Artifact k6build.Artifact `json:"artifact"`
 }
 
 // String returns a text serialization of the BuildRequest
 func (r BuildRequest) String() string {
 	buffer := &bytes.Buffer{}
-	buffer.WriteString(fmt.Sprintf("platform: %s", r.Platform))
-	buffer.WriteString(fmt.Sprintf("k6: %s", r.K6Constrains))
+	fmt.Fprintf(buffer, "platform: %s", r.Platform)
+	fmt.Fprintf(buffer, "k6: %s", r.K6Constrains)
 	for _, d := range r.Dependencies {
-		buffer.WriteString(fmt.Sprintf("%s:%q", d.Name, d.Constraints))
+		fmt.Fprintf(buffer, "%s:%q", d.Name, d.Constraints)
 	}
 	return buffer.String()
 }
@@ -55,7 +55,7 @@ func (r BuildRequest) String() string {
 // String returns a text serialization of the BuildResponse
 func (r BuildResponse) String() string {
 	buffer := &bytes.Buffer{}
-	buffer.WriteString(fmt.Sprintf("artifact: %s", r.Artifact.String()))
+	fmt.Fprintf(buffer, "artifact: %s", r.Artifact.String())
 	return buffer.String()
 }
 
@@ -79,9 +79,9 @@ type ResolveResponse struct {
 // String returns a text serialization of the ResolveRequest
 func (r ResolveRequest) String() string {
 	buffer := &bytes.Buffer{}
-	buffer.WriteString(fmt.Sprintf("k6: %s", r.K6Constrains))
+	fmt.Fprintf(buffer, "k6: %s", r.K6Constrains)
 	for _, d := range r.Dependencies {
-		buffer.WriteString(fmt.Sprintf("%s:%q", d.Name, d.Constraints))
+		fmt.Fprintf(buffer, "%s:%q", d.Name, d.Constraints)
 	}
 	return buffer.String()
 }
@@ -90,10 +90,10 @@ func (r ResolveRequest) String() string {
 func (r ResolveResponse) String() string {
 	buffer := &bytes.Buffer{}
 	if r.Error != nil {
-		buffer.WriteString(fmt.Sprintf("error: %s", r.Error.Error()))
+		fmt.Fprintf(buffer, "error: %s", r.Error.Error())
 	}
 	for dep, version := range r.Dependencies {
-		buffer.WriteString(fmt.Sprintf("%s:%q ", dep, version))
+		fmt.Fprintf(buffer, "%s:%q ", dep, version)
 	}
 	return buffer.String()
 }

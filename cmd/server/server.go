@@ -381,7 +381,7 @@ func getLogger(logLevel string) (*slog.Logger, error) {
 
 	return slog.New(
 		slog.NewTextHandler(
-			os.Stderr,
+			os.Stderr, //nolint:forbidigo
 			&slog.HandlerOptions{
 				Level: ll,
 			},

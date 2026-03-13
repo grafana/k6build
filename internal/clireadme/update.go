@@ -19,7 +19,7 @@ func Update(root *cobra.Command, filename string, headingOffset int) error {
 
 	filename = filepath.Clean(filename)
 
-	src, err := os.ReadFile(filename)
+	src, err := os.ReadFile(filename) //nolint:gosec,forbidigo
 	if err != nil {
 		return err
 	}
@@ -32,5 +32,5 @@ func Update(root *cobra.Command, filename string, headingOffset int) error {
 		src = res
 	}
 
-	return os.WriteFile(filename, src, 0o600) //nolint:gomnd
+	return os.WriteFile(filename, src, 0o600) //nolint:gomnd,gosec,forbidigo
 }

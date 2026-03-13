@@ -99,7 +99,7 @@ func New() *cobra.Command { //nolint:funlen
 			if err != nil {
 				return fmt.Errorf("malformed URL %w", err)
 			}
-			artifactBinary, err := os.Open(binaryURL.Path)
+			artifactBinary, err := os.Open(binaryURL.Path) //nolint:gosec,forbidigo
 			if err != nil {
 				return fmt.Errorf("opening output file %w", err)
 			}
@@ -107,7 +107,7 @@ func New() *cobra.Command { //nolint:funlen
 				_ = artifactBinary.Close()
 			}()
 
-			binary, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, 0o755) //nolint:gosec
+			binary, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, 0o755) //nolint:gosec,forbidigo
 			if err != nil {
 				return fmt.Errorf("opening output file %w", err)
 			}
@@ -127,9 +127,9 @@ func New() *cobra.Command { //nolint:funlen
 	_ = cmd.MarkFlagRequired("platform")
 	cmd.Flags().StringVarP(&config.Catalog, "catalog", "c", catalog.DefaultCatalogURL, "dependencies catalog")
 	cmd.Flags().StringVarP(&config.StoreDir, "store-dir", "f", "/tmp/k6build/store", "object store dir")
-	cmd.Flags().BoolVarP(&config.Opts.Verbose, "verbose", "v", false, "print build process output")
+	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "print build process output")
 	cmd.Flags().BoolVarP(&config.CopyGoEnv, "copy-go-env", "g", true, "copy go environment")
-	cmd.Flags().StringToStringVarP(&config.Opts.Env, "env", "e", nil, "build environment variables")
+	cmd.Flags().StringToStringVarP(&config.Env, "env", "e", nil, "build environment variables")
 	cmd.Flags().StringVarP(&output, "output", "o", "k6", "path to put the binary as an executable.")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "don't print artifact's details")
 	cmd.Flags().BoolVar(

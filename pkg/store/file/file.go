@@ -24,12 +24,12 @@ type Store struct {
 
 // NewTempFileStore creates a file object store using a temporary file
 func NewTempFileStore() (store.ObjectStore, error) {
-	return NewFileStore(filepath.Join(os.TempDir(), "k6build", "objectstore"))
+	return NewFileStore(filepath.Join(os.TempDir(), "k6build", "objectstore")) //nolint:forbidigo
 }
 
 // NewFileStore creates an object store backed by a directory
 func NewFileStore(dir string) (store.ObjectStore, error) {
-	err := os.MkdirAll(dir, 0o750)
+	err := os.MkdirAll(dir, 0o750) //nolint:forbidigo
 	if err != nil {
 		return nil, k6build.NewWrappedError(store.ErrInitializingStore, err)
 	}
@@ -54,7 +54,7 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 
 	// create the directory first so the lock file can be placed inside it
 	// TODO: check permissions
-	err := os.MkdirAll(objectDir, 0o750)
+	err := os.MkdirAll(objectDir, 0o750) //nolint:forbidigo
 	if err != nil {
 		return store.Object{}, k6build.NewWrappedError(store.ErrCreatingObject, err)
 	}
@@ -67,11 +67,11 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 	defer unlock()
 
 	// check for duplicate after acquiring the lock to avoid TOCTOU races
-	if _, err := os.Stat(filepath.Join(objectDir, "checksum")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(objectDir, "checksum")); !errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
 		return store.Object{}, fmt.Errorf("%w: %q", store.ErrDuplicateObject, id)
 	}
 
-	objectFile, err := os.Create(filepath.Join(objectDir, "data")) //nolint:gosec
+	objectFile, err := os.Create(filepath.Join(objectDir, "data")) //nolint:gosec,forbidigo
 	if err != nil {
 		return store.Object{}, k6build.NewWrappedError(store.ErrCreatingObject, err)
 	}
@@ -89,7 +89,7 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 	checksum := fmt.Sprintf("%x", sha256.Sum256(buff.Bytes()))
 
 	// write metadata
-	err = os.WriteFile(filepath.Join(objectDir, "checksum"), []byte(checksum), 0o644) //nolint:gosec
+	err = os.WriteFile(filepath.Join(objectDir, "checksum"), []byte(checksum), 0o644) //nolint:gosec,forbidigo
 	if err != nil {
 		return store.Object{}, k6build.NewWrappedError(store.ErrCreatingObject, err)
 	}
@@ -105,9 +105,9 @@ func (f *Store) Put(_ context.Context, id string, content io.Reader) (store.Obje
 // Get retrieves an objects if exists in the object store or an error otherwise
 func (f *Store) Get(_ context.Context, id string) (store.Object, error) {
 	objectDir := filepath.Join(f.dir, id)
-	_, err := os.Stat(objectDir)
+	_, err := os.Stat(objectDir) //nolint:forbidigo
 
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) { //nolint:forbidigo
 		return store.Object{}, fmt.Errorf("%w (%s)", store.ErrObjectNotFound, id)
 	}
 
@@ -122,7 +122,7 @@ func (f *Store) Get(_ context.Context, id string) (store.Object, error) {
 	}
 	defer unlock()
 
-	checksum, err := os.ReadFile(filepath.Join(objectDir, "checksum")) //nolint:gosec
+	checksum, err := os.ReadFile(filepath.Join(objectDir, "checksum")) //nolint:gosec,forbidigo
 	if err != nil {
 		// directory exists but checksum not yet written — treat as not found
 		if errors.Is(err, os.ErrNotExist) {

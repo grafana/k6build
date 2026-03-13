@@ -136,7 +136,11 @@ func TestPutObject(t *testing.T) {
 				t.Fatalf("invalid url %v", err)
 			}
 
-			resp, err := http.Get(obj.URL)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, obj.URL, nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("reading object url %v", err)
 			}
@@ -213,7 +217,11 @@ func TestGetObject(t *testing.T) {
 				t.Fatalf("invalid url %v", err)
 			}
 
-			resp, err := http.Get(obj.URL)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, obj.URL, nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("reading object url %v", err)
 			}

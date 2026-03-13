@@ -86,7 +86,7 @@ func New() *cobra.Command {
 
 			log := slog.New(
 				slog.NewTextHandler(
-					os.Stderr,
+					os.Stderr, //nolint:forbidigo
 					&slog.HandlerOptions{
 						Level: ll,
 					},

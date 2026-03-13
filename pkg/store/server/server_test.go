@@ -60,12 +60,15 @@ func TestStoreServerGet(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
 			url := fmt.Sprintf("%s/store/%s", srv.URL, tc.id)
-			resp, err := http.Get(url)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("accessing server %v", err)
 			}
@@ -130,16 +133,21 @@ func TestStoreServerPut(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
 			url := fmt.Sprintf("%s/store/%s", srv.URL, tc.id)
-			resp, err := http.Post(
+			req, err := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
 				url,
-				"application/octet-stream",
 				bytes.NewBufferString(tc.content),
 			)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			req.Header.Set("Content-Type", "application/octet-stream")
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("accessing server %v", err)
 			}
@@ -220,12 +228,15 @@ func TestStoreServerDownload(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
 			url := fmt.Sprintf("%s/store/%s/download", srv.URL, tc.id)
-			resp, err := http.Get(url)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("accessing server %v", err)
 			}

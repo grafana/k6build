@@ -214,7 +214,7 @@ func (r *BuildClient) doRequest(ctx context.Context, path string, request any, r
 	// try at least once
 	for {
 		req.Body = io.NopCloser(bytes.NewReader(body)) // reset the body
-		resp, err = r.client.Do(req)
+		resp, err = r.client.Do(req)                   //nolint:gosec
 
 		if retries == 0 || !shouldRetry(err, resp) {
 			break

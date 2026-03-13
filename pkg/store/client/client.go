@@ -59,7 +59,7 @@ func (c *StoreClient) Get(ctx context.Context, id string) (store.Object, error) 
 		return store.Object{}, k6build.NewWrappedError(api.ErrInvalidRequest, err)
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req) //nolint:gosec
 	if err != nil {
 		return store.Object{}, k6build.NewWrappedError(api.ErrRequestFailed, err)
 	}
@@ -101,7 +101,7 @@ func (c *StoreClient) Put(ctx context.Context, id string, content io.Reader) (st
 	}
 
 	req.Header.Set("Content-Type", "application/octet-stream")
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req) //nolint:gosec
 	if err != nil {
 		return store.Object{}, k6build.NewWrappedError(api.ErrRequestFailed, err)
 	}
@@ -132,7 +132,7 @@ func (c *StoreClient) Download(ctx context.Context, object store.Object) (io.Rea
 		return nil, k6build.NewWrappedError(api.ErrInvalidRequest, err)
 	}
 
-	resp, err := c.client.Do(req) //nolint:bodyclose
+	resp, err := c.client.Do(req) //nolint:bodyclose,gosec
 	if err != nil {
 		return nil, k6build.NewWrappedError(api.ErrRequestFailed, err)
 	}

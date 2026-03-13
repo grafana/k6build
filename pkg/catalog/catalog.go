@@ -134,7 +134,7 @@ func NewCatalog(ctx context.Context, location string) (Catalog, error) {
 
 // NewCatalogFromFile creates a Catalog from a json file
 func NewCatalogFromFile(catalogFile string) (Catalog, error) {
-	json, err := os.ReadFile(catalogFile) //nolint:gosec
+	json, err := os.ReadFile(catalogFile) //nolint:gosec,forbidigo
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrOpening, err)
 	}
@@ -150,7 +150,7 @@ func NewCatalogFromURL(ctx context.Context, catalogURL string) (Catalog, error) 
 		return nil, fmt.Errorf("%w %w", ErrDownload, err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("%w %w", ErrDownload, err)
 	}

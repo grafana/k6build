@@ -322,14 +322,14 @@ func generateArtifactID(platform string, deps map[string]catalog.Module) string 
 	hashData.WriteString(platform)
 
 	// add k6 as the first dependency
-	hashData.WriteString(fmt.Sprintf(":%s%s", k6DependencyName, deps[k6DependencyName].Version))
+	fmt.Fprintf(&hashData, ":%s%s", k6DependencyName, deps[k6DependencyName].Version)
 
 	// add the other dependencies
 	for _, d := range slices.Sorted(maps.Keys(deps)) {
 		if d == k6DependencyName {
 			continue
 		}
-		hashData.WriteString(fmt.Sprintf(":%s%s", d, deps[d].Version))
+		fmt.Fprintf(&hashData, ":%s%s", d, deps[d].Version)
 	}
 
 	return fmt.Sprintf("%x", sha1.Sum(hashData.Bytes())) //nolint:gosec
@@ -382,8 +382,8 @@ func (b *Builder) buildArtifact(
 		},
 	}
 	if b.opts.Verbose {
-		builderOpts.Stdout = os.Stdout
-		builderOpts.Stderr = os.Stderr
+		builderOpts.Stdout = os.Stdout //nolint:forbidigo
+		builderOpts.Stderr = os.Stderr //nolint:forbidigo
 	}
 
 	builder, err := b.foundry.NewFoundry(ctx, builderOpts)

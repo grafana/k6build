@@ -22,10 +22,10 @@ type mockBuilder struct {
 }
 
 func (m mockBuilder) Build(
-	ctx context.Context,
+	_ context.Context,
 	platform string,
-	k6Constrains string,
-	deps []k6build.Dependency,
+	_ string,
+	_ []k6build.Dependency,
 ) (k6build.Artifact, error) {
 	if m.err != nil {
 		return k6build.Artifact{}, m.err
@@ -38,9 +38,9 @@ func (m mockBuilder) Build(
 }
 
 func (m mockBuilder) Resolve(
-	ctx context.Context,
-	k6Constrains string,
-	deps []k6build.Dependency,
+	_ context.Context,
+	_ string,
+	_ []k6build.Dependency,
 ) (map[string]string, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -122,7 +122,6 @@ func TestBuild(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -138,7 +137,12 @@ func TestBuild(t *testing.T) {
 			}
 
 			url, _ := url.Parse(apiserver.URL)
-			resp, err := http.Post(url.JoinPath("build").String(), "application/json", req)
+			httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url.JoinPath("build").String(), req)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(httpReq)
 			if err != nil {
 				t.Fatalf("making request %v", err)
 			}
@@ -203,7 +207,6 @@ func TestBuildGet(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -219,7 +222,12 @@ func TestBuildGet(t *testing.T) {
 				queryParams.Add(param, value)
 			}
 
-			resp, err := http.Get(u.String() + "?" + queryParams.Encode())
+			u.RawQuery = queryParams.Encode()
+			httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, u.String(), nil)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			resp, err := http.DefaultClient.Do(httpReq)
 			if err != nil {
 				t.Fatalf("making request %v", err)
 			}
@@ -291,7 +299,6 @@ func TestResolve(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -307,7 +314,12 @@ func TestResolve(t *testing.T) {
 			}
 
 			url, _ := url.Parse(apiserver.URL)
-			resp, err := http.Post(url.JoinPath("resolve").String(), "application/json", req)
+			httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url.JoinPath("resolve").String(), req)
+			if err != nil {
+				t.Fatalf("creating request %v", err)
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(httpReq)
 			if err != nil {
 				t.Fatalf("making request %v", err)
 			}

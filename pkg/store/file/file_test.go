@@ -110,7 +110,7 @@ func TestFileStoreStoreObject(t *testing.T) {
 				t.Fatalf("invalid url %v", err)
 			}
 
-			content, err := os.ReadFile(filePath)
+			content, err := os.ReadFile(filePath) //nolint:forbidigo
 			if err != nil {
 				t.Fatalf("reading object url %v", err)
 			}
@@ -177,7 +177,7 @@ func TestFileStoreGet(t *testing.T) {
 				t.Fatalf("invalid url %v", err)
 			}
 
-			data, err := os.ReadFile(fileUPath)
+			data, err := os.ReadFile(fileUPath) //nolint:forbidigo
 			if err != nil {
 				t.Fatalf("reading object url %v", err)
 			}

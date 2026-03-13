@@ -71,7 +71,7 @@ func printLong(buff *bytes.Buffer, cmd *cobra.Command, offset int) {
 
 func printUseLine(buff *bytes.Buffer, cmd *cobra.Command) {
 	if cmd.Runnable() {
-		buff.WriteString(fmt.Sprintf("```\n%s\n```\n\n", cmd.UseLine()))
+		fmt.Fprintf(buff, "```\n%s\n```\n\n", cmd.UseLine())
 	}
 }
 
@@ -100,7 +100,7 @@ func printExamples(buff *bytes.Buffer, cmd *cobra.Command, offset int) {
 	}
 
 	buff.WriteString(heading(offset, 2, "Examples"))
-	buff.WriteString(fmt.Sprintf("```\n%s\n```\n\n", cmd.Example))
+	fmt.Fprintf(buff, "```\n%s\n```\n\n", cmd.Example)
 }
 
 func printAdditionalHelpTopics(buff *bytes.Buffer, cmd *cobra.Command, offset int) {
@@ -140,7 +140,7 @@ func printSeeAlso(buf *bytes.Buffer, cmd *cobra.Command, offset int) {
 		parent := cmd.Parent()
 		pname := parent.CommandPath()
 		link := strings.ReplaceAll(pname, " ", "-")
-		buf.WriteString(fmt.Sprintf("* [%s](#%s)\t - %s\n", pname, link, parent.Short))
+		fmt.Fprintf(buf, "* [%s](#%s)\t - %s\n", pname, link, parent.Short)
 	}
 
 	firstChild := true
@@ -156,7 +156,7 @@ func printSeeAlso(buf *bytes.Buffer, cmd *cobra.Command, offset int) {
 
 		cname := cmd.CommandPath() + " " + child.Name()
 		link := strings.ReplaceAll(cname, " ", "-")
-		buf.WriteString(fmt.Sprintf("* [%s](#%s)\t - %s\n", cname, link, child.Short))
+		fmt.Fprintf(buf, "* [%s](#%s)\t - %s\n", cname, link, child.Short)
 	}
 
 	buf.WriteString("\n")

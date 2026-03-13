@@ -58,8 +58,6 @@ func TestResolve(t *testing.T) {
 		t.Fatalf("test setup %v", err)
 	}
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.title, func(t *testing.T) {
 			t.Parallel()
 
@@ -151,7 +149,7 @@ func TestCatalogFromFile(t *testing.T) {
 	t.Parallel()
 
 	catalogFile := filepath.Join(t.TempDir(), "catalog.json")
-	err := os.WriteFile(catalogFile, []byte(testCatalog), 0o644)
+	err := os.WriteFile(catalogFile, []byte(testCatalog), 0o644) //nolint:forbidigo
 	if err != nil {
 		t.Fatalf("test setup: %v", err)
 	}

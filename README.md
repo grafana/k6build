@@ -270,6 +270,7 @@ This function is implemented in the /build endpoint, and supports both POST and 
 POST
 
 The POST method expects the build request in the request's body as a JSON object.
+The optional "nocache" field can be set to true to force a rebuild bypassing the cache.
 
 Example
 
@@ -298,6 +299,21 @@ Example
 	  }
 	}
 
+Force a rebuild bypassing the cache:
+
+	curl -X POST http://localhost:8000/build -d \
+	'{
+	  "k6":"v1.4.0",
+	  "dependencies":[
+	    {
+		"name":"k6/x/kubernetes",
+		"constraints":">v0.8.0"
+	    }
+	  ],
+	  "platform":"linux/amd64",
+	  "nocache":true
+	}' | jq .
+
 GET
 
 The GET method expects the build requests in the query parameters:
@@ -305,6 +321,7 @@ The GET method expects the build requests in the query parameters:
 - k6: the k6 version constrains (e.g. k6=v1.2.0)
 - dep: a dependency in the form name:version (e.g. dep=k6/x/faker:v0.4.0).
   Multple dependencies can be defined in a request.
+- nocache: set to "true" to force a rebuild bypassing the cache (e.g. nocache=true)
 
 Example
 
@@ -322,6 +339,10 @@ Example
 	  "checksum": "bfdf51ec9279e6d7f91df0a342d0c90ab4990ff1fb0215938505a6894edaf913"
 	  }
 	}
+
+Force a rebuild bypassing the cache:
+
+	curl -X GET "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0&nocache=true" | jq .
 
 Caching
 

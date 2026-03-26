@@ -80,7 +80,7 @@ func (a *APIServer) BuildPost(w http.ResponseWriter, r *http.Request) {
 
 // BuildGet implements the request handler for the build request using get
 // the build arguments
-// /build?k6=version&platform=version&dep=name:constrains&dep=name:constrains
+// /build?k6=version&platform=version&dep=name:constrains&dep=name:constrains&nocache=true
 func (a *APIServer) BuildGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
@@ -91,6 +91,7 @@ func (a *APIServer) BuildGet(w http.ResponseWriter, r *http.Request) {
 		name, constraints, _ := strings.Cut(dep, ":")
 		req.Dependencies = append(req.Dependencies, k6build.Dependency{Name: name, Constraints: constraints})
 	}
+	req.NoCache = r.URL.Query().Get("nocache") == "true"
 
 	a.processBuildRequest(w, r, req)
 }
@@ -100,8 +101,13 @@ func (a *APIServer) processBuildRequest(w http.ResponseWriter, r *http.Request, 
 
 	resp := api.BuildResponse{}
 
+	ctx := r.Context()
+	if req.NoCache {
+		ctx = api.WithNoCache(ctx, true)
+	}
+
 	artifact, err := a.srv.Build(
-		r.Context(),
+		ctx,
 		req.Platform,
 		req.K6Constrains,
 		req.Dependencies,

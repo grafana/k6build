@@ -13,6 +13,8 @@ import (
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6build/pkg/store/api"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // ErrInvalidConfig signals an error with the client configuration
@@ -39,7 +41,9 @@ func NewStoreClient(config StoreClientConfig) (*StoreClient, error) {
 
 	client := config.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		}
 	}
 	return &StoreClient{
 		server: srvURL,

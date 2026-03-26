@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/k6build/pkg/store"
 	"github.com/grafana/k6build/pkg/store/client"
 	"github.com/grafana/k6build/pkg/store/s3"
+	"github.com/grafana/k6build/pkg/tracing"
 	"github.com/grafana/k6build/pkg/util"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -237,6 +238,7 @@ type serverConfig struct {
 	verbose           bool
 	shutdownTimeout   time.Duration
 	cacheMaxAge       time.Duration
+	otelEndpoint      string
 }
 
 // New creates new cobra command for the server command.
@@ -260,6 +262,15 @@ func New() *cobra.Command { //nolint:funlen
 			if err != nil {
 				return err
 			}
+
+			shutdownTracer, err := tracing.Setup(cmd.Context(), tracing.Config{
+				Endpoint:    cfg.otelEndpoint,
+				ServiceName: "k6build-server",
+			})
+			if err != nil {
+				return fmt.Errorf("setting up tracing: %w", err)
+			}
+			defer shutdownTracer(cmd.Context()) //nolint:errcheck
 
 			if cfg.enableCgo {
 				log.Warn("CGO is enabled by default. Use --enable-cgo=false to disable it.")
@@ -369,6 +380,12 @@ func New() *cobra.Command { //nolint:funlen
 		"s3-lock-backoff",
 		time.Second,
 		"time between retries for acquiring a lock",
+	)
+	cmd.Flags().StringVar(
+		&cfg.otelEndpoint,
+		"otel-endpoint",
+		"",
+		"OTLP gRPC endpoint for traces (e.g. localhost:4317). If empty, tracing is disabled.",
 	)
 
 	return cmd

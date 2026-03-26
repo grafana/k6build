@@ -200,7 +200,7 @@ func (b *Builder) Build( //nolint:funlen
 			artifactObject, err = b.store.Get(ctx, id)
 			if err == nil {
 				b.metrics.storeHitsCounter.Inc()
-        span.SetAttributes(attribute.Bool("k6build.cache_hit", true))
+				span.SetAttributes(attribute.Bool("k6build.cache_hit", true))
 
 				return k6build.Artifact{
 					ID:           id,

@@ -222,6 +222,7 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
 type serverConfig struct {
 	allowBuildSemvers bool
 	catalogURL        string
+	catalogTTL        time.Duration
 	copyGoEnv         bool
 	enableCgo         bool
 	goEnv             map[string]string
@@ -314,6 +315,13 @@ func New() *cobra.Command { //nolint:funlen
 		"c",
 		catalog.DefaultCatalogURL,
 		"dependencies catalog. Can be path to a local file or an URL.",
+	)
+	cmd.Flags().DurationVar(
+		&cfg.catalogTTL,
+		"catalog-ttl",
+		30*time.Minute,
+		"TTL for the catalog cache. The catalog is refreshed after this period."+
+			" On resolution miss, a forced refresh is attempted regardless of TTL.",
 	)
 	cmd.Flags().StringVar(
 		&cfg.storeURL,
@@ -427,6 +435,14 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 	}
 	cfg.goEnv["CGO_ENABLED"] = cgoEnabled
 
+	ctlg, err := catalog.NewCachedCatalog(ctx, catalog.CachedCatalogConfig{
+		Location: cfg.catalogURL,
+		TTL:      cfg.catalogTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating catalog: %w", err)
+	}
+
 	config := builder.Config{
 		Opts: builder.Opts{
 			GoOpts: builder.GoOpts{
@@ -436,7 +452,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 			Verbose:           cfg.verbose,
 			AllowBuildSemvers: cfg.allowBuildSemvers,
 		},
-		Catalog:    cfg.catalogURL,
+		Catalog:    ctlg,
 		Store:      store,
 		Registerer: prometheus.DefaultRegisterer,
 		Lock:       lock,

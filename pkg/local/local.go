@@ -6,6 +6,7 @@ import (
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/builder"
+	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/store/file"
 )
 
@@ -18,9 +19,9 @@ type GoOpts = builder.GoOpts
 // Config defines the configuration for a Local build service
 type Config struct {
 	Opts
-	// path to catalog's json file. Can be a file path or a URL
-	Catalog string
-	// path to object store dir
+	// CatalogURL is the path to catalog's json file. Can be a file path or a URL.
+	CatalogURL string
+	// StoreDir is the path to the object store directory.
 	StoreDir string
 }
 
@@ -31,9 +32,14 @@ func NewBuildService(ctx context.Context, config Config) (k6build.BuildService, 
 		return nil, k6build.NewWrappedError(builder.ErrInitializingBuilder, err)
 	}
 
+	ctlg, err := catalog.NewCatalog(ctx, config.CatalogURL)
+	if err != nil {
+		return nil, k6build.NewWrappedError(builder.ErrInitializingBuilder, err)
+	}
+
 	return builder.New(ctx, builder.Config{
 		Opts:    config.Opts,
-		Catalog: config.Catalog,
+		Catalog: ctlg,
 		Store:   store,
 	})
 }

@@ -444,7 +444,12 @@ func (b *Builder) buildArtifact(
 		if k == k6DependencyName {
 			continue
 		}
-		mods = append(mods, k6foundry.Module{Path: m.Path, Version: m.Version})
+		// Strip v0.0.0+ build metadata prefix so go get receives a bare SHA.
+		version := m.Version
+		if _, sha, found := strings.Cut(version, "+"); found {
+			version = sha
+		}
+		mods = append(mods, k6foundry.Module{Path: m.Path, Version: version})
 		cgoEnabled = cgoEnabled || m.Cgo
 	}
 
@@ -462,6 +467,13 @@ func (b *Builder) buildArtifact(
 			Env:       env,
 			CopyGoEnv: b.opts.CopyGoEnv,
 		},
+	}
+	// Extract the major version suffix from the k6 module path (e.g. "v2" from "go.k6.io/k6/v2")
+	// so k6foundry uses the correct import path when the k6 version is a git SHA.
+	if idx := strings.LastIndex(k6Mod.Path, "/"); idx >= 0 {
+		if suffix := k6Mod.Path[idx+1:]; strings.HasPrefix(suffix, "v") && len(suffix) > 1 {
+			builderOpts.K6MajorVersion = suffix
+		}
 	}
 	if b.opts.Verbose {
 		builderOpts.Stdout = os.Stdout //nolint:forbidigo

@@ -231,6 +231,7 @@ func TestBuild(t *testing.T) {
 			_, err = client.Build(
 				t.Context(),
 				"linux/amd64",
+				k6build.K6ModPath,
 				"v0.1.0",
 				[]k6build.Dependency{{Name: "k6/x/test", Constraints: "*"}},
 			)
@@ -292,6 +293,7 @@ func TestResolve(t *testing.T) {
 
 			_, err = client.Resolve(
 				context.TODO(),
+				k6build.K6ModPath,
 				"v0.1.0",
 				[]k6build.Dependency{{Name: "k6/x/test", Constraints: "*"}},
 			)

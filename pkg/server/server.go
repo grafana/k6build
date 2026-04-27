@@ -16,6 +16,14 @@ import (
 	"github.com/grafana/k6build/pkg/api"
 )
 
+// resolveK6ModPath returns the effective k6 module path, defaulting to K6ModPath (v1) when empty.
+func resolveK6ModPath(k6ModPath string) string {
+	if k6ModPath == "" {
+		return k6build.K6ModPath
+	}
+	return k6ModPath
+}
+
 // APIServerConfig defines the configuration for the APIServer
 type APIServerConfig struct {
 	BuildService k6build.BuildService
@@ -80,13 +88,14 @@ func (a *APIServer) BuildPost(w http.ResponseWriter, r *http.Request) {
 
 // BuildGet implements the request handler for the build request using get
 // the build arguments
-// /build?k6=version&platform=version&dep=name:constrains&dep=name:constrains&nocache=true
+// /build?k6=version&platform=version&dep=name:constrains&dep=name:constrains&nocache=true&k6modpath=go.k6.io/k6
 func (a *APIServer) BuildGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	req := api.BuildRequest{}
 	req.Platform = r.URL.Query().Get("platform")
 	req.K6Constrains = r.URL.Query().Get("k6")
+	req.K6ModPath = r.URL.Query().Get("k6modpath")
 	for _, dep := range r.URL.Query()["dep"] {
 		name, constraints, _ := strings.Cut(dep, ":")
 		req.Dependencies = append(req.Dependencies, k6build.Dependency{Name: name, Constraints: constraints})
@@ -115,6 +124,7 @@ func (a *APIServer) processBuildRequest(w http.ResponseWriter, r *http.Request, 
 	artifact, err := a.srv.Build(
 		ctx,
 		req.Platform,
+		resolveK6ModPath(req.K6ModPath),
 		req.K6Constrains,
 		req.Dependencies,
 	)
@@ -171,6 +181,7 @@ func (a *APIServer) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	deps, err := a.srv.Resolve(
 		r.Context(),
+		resolveK6ModPath(req.K6ModPath),
 		req.K6Constrains,
 		req.Dependencies,
 	)

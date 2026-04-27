@@ -25,6 +25,7 @@ func (m mockBuilder) Build(
 	_ context.Context,
 	platform string,
 	_ string,
+	_ string,
 	_ []k6build.Dependency,
 ) (k6build.Artifact, error) {
 	if m.err != nil {
@@ -39,6 +40,7 @@ func (m mockBuilder) Build(
 
 func (m mockBuilder) Resolve(
 	_ context.Context,
+	_ string,
 	_ string,
 	_ []k6build.Dependency,
 ) (map[string]string, error) {
@@ -58,6 +60,7 @@ func (m *noCacheMockBuilder) Build(
 	ctx context.Context,
 	platform string,
 	_ string,
+	_ string,
 	_ []k6build.Dependency,
 ) (k6build.Artifact, error) {
 	nc := api.NoCache(ctx)
@@ -71,6 +74,7 @@ func (m *noCacheMockBuilder) Build(
 
 func (m *noCacheMockBuilder) Resolve(
 	_ context.Context,
+	_ string,
 	_ string,
 	_ []k6build.Dependency,
 ) (map[string]string, error) {

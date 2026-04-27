@@ -25,6 +25,9 @@ var (
 
 // BuildRequest defines a request to the build service
 type BuildRequest struct {
+	// K6ModPath is the Go module path for the k6 core to build against.
+	// Defaults to "go.k6.io/k6" (v1) when omitted for backward compatibility.
+	K6ModPath    string               `json:"k6_mod_path,omitempty"`
 	K6Constrains string               `json:"k6,omitempty"`
 	Dependencies []k6build.Dependency `json:"dependencies,omitempty"`
 	Platform     string               `json:"platform,omitempty"`
@@ -62,6 +65,9 @@ func (r BuildResponse) String() string {
 // ResolveRequest defines a request to the build service for validating if the dependency
 // constrains can be satisfied
 type ResolveRequest struct {
+	// K6ModPath is the Go module path for the k6 core to resolve against.
+	// Defaults to "go.k6.io/k6" (v1) when omitted for backward compatibility.
+	K6ModPath    string               `json:"k6_mod_path,omitempty"`
 	K6Constrains string               `json:"k6,omitempty"`
 	Dependencies []k6build.Dependency `json:"dependencies,omitempty"`
 }

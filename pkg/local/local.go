@@ -20,6 +20,9 @@ type Config struct {
 	Opts
 	// path to catalog's json file. Can be a file path or a URL
 	Catalog string
+	// Catalogs maps a k6 module path to the catalog URL to use for that module path.
+	// If a module path is not in this map, Catalog is used as the fallback.
+	Catalogs map[string]string
 	// path to object store dir
 	StoreDir string
 }
@@ -32,8 +35,9 @@ func NewBuildService(ctx context.Context, config Config) (k6build.BuildService, 
 	}
 
 	return builder.New(ctx, builder.Config{
-		Opts:    config.Opts,
-		Catalog: config.Catalog,
-		Store:   store,
+		Opts:     config.Opts,
+		Catalog:  config.Catalog,
+		Catalogs: config.Catalogs,
+		Store:    store,
 	})
 }

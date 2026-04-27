@@ -15,12 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grafana/k6foundry"
+
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/api"
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/lock"
 	"github.com/grafana/k6build/pkg/store"
-	"github.com/grafana/k6foundry"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
@@ -31,7 +32,6 @@ import (
 
 const (
 	k6DependencyName = "k6"
-	k6Path           = "go.k6.io/k6"
 
 	opRe    = `(?<operator>[=|~|>|<|\^|>=|<=|!=]){0,1}(?:\s*)`
 	verRe   = `(?P<version>[v|V](?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))`
@@ -80,8 +80,12 @@ type Opts struct {
 
 // Config defines the configuration for a Builder
 type Config struct {
-	Opts        Opts
-	Catalog     string
+	Opts    Opts
+	Catalog string
+	// Catalogs maps a k6 module path (e.g. "go.k6.io/k6/v2") to the catalog URL
+	// to use when a build request specifies that module path. If a module path is
+	// not in this map, Catalog is used as the fallback.
+	Catalogs    map[string]string
 	Store       store.ObjectStore
 	Foundry     FoundryFactory
 	Registerer  prometheus.Registerer
@@ -89,10 +93,32 @@ type Config struct {
 	LockBackoff time.Duration
 }
 
+// ParseCatalogs parses a slice of "module=url" strings (as supplied by the
+// --catalog-for CLI flag) into the map expected by Config.Catalogs.
+func ParseCatalogs(entries []string) (map[string]string, error) {
+	if len(entries) == 0 {
+		return nil, nil //nolint:nilnil
+	}
+
+	catalogs := make(map[string]string, len(entries))
+
+	for _, entry := range entries {
+		mod, url, ok := strings.Cut(entry, "=")
+		if !ok || mod == "" || url == "" {
+			return nil, fmt.Errorf("invalid catalog entry %q: expected module=url", entry)
+		}
+
+		catalogs[mod] = url
+	}
+
+	return catalogs, nil
+}
+
 // Builder implements the BuildService interface
 type Builder struct {
 	opts        Opts
 	catalog     string
+	catalogs    map[string]string
 	store       store.ObjectStore
 	foundry     FoundryFactory
 	metrics     *metrics
@@ -134,6 +160,7 @@ func New(_ context.Context, config Config) (*Builder, error) {
 	}
 	return &Builder{
 		catalog:     config.Catalog,
+		catalogs:    config.Catalogs,
 		opts:        config.Opts,
 		store:       config.Store,
 		foundry:     foundry,
@@ -147,6 +174,7 @@ func New(_ context.Context, config Config) (*Builder, error) {
 func (b *Builder) Build( //nolint:funlen
 	ctx context.Context,
 	platform string,
+	k6ModPath string,
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (artifact k6build.Artifact, buildErr error) {
@@ -180,7 +208,7 @@ func (b *Builder) Build( //nolint:funlen
 		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 	}
 
-	resolved, err := b.resolveDependencies(ctx, k6Constrains, deps)
+	resolved, err := b.resolveDependencies(ctx, k6ModPath, k6Constrains, deps)
 	if err != nil {
 		b.metrics.buildsInvalidCounter.Inc()
 		return k6build.Artifact{}, err
@@ -231,7 +259,7 @@ func (b *Builder) Build( //nolint:funlen
 
 	artifactBuffer := &bytes.Buffer{}
 
-	err = b.buildArtifact(ctx, platform, resolved, artifactBuffer)
+	buildInfo, err := b.buildArtifact(ctx, platform, resolved, artifactBuffer)
 	if err != nil {
 		return k6build.Artifact{}, err
 	}
@@ -247,22 +275,30 @@ func (b *Builder) Build( //nolint:funlen
 		return k6build.Artifact{}, k6build.NewWrappedError(k6build.ErrAccessingArtifact, err)
 	}
 
+	warnings := make([]string, 0, len(buildInfo.Warnings))
+	for _, w := range buildInfo.Warnings {
+		warnings = append(warnings, fmt.Sprintf("[%s] %s", w.Code, w.Message))
+	}
+
 	return k6build.Artifact{
 		ID:           id,
 		Checksum:     artifactObject.Checksum,
 		URL:          artifactObject.URL,
 		Dependencies: resolvedVersions(resolved),
 		Platform:     platform,
+		K6ModPath:    buildInfo.K6ModPath,
+		Warnings:     warnings,
 	}, nil
 }
 
 // Resolve returns the version that resolve the given dependencies
 func (b *Builder) Resolve(
 	ctx context.Context,
+	k6ModPath string,
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (map[string]string, error) {
-	resolved, err := b.resolveDependencies(ctx, k6Constrains, deps)
+	resolved, err := b.resolveDependencies(ctx, k6ModPath, k6Constrains, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -272,13 +308,24 @@ func (b *Builder) Resolve(
 
 func (b *Builder) resolveDependencies(
 	ctx context.Context,
+	k6ModPath string,
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (map[string]catalog.Module, error) {
 	ctx, span := tracer.Start(ctx, "Builder.resolveDependencies")
 	defer span.End()
 
-	ctlg, err := catalog.NewCatalog(ctx, b.catalog)
+	// Default to v1 module path if not specified.
+	if k6ModPath == "" {
+		k6ModPath = k6build.K6ModPath
+	}
+
+	catalogURL := b.catalog
+	if url, ok := b.catalogs[k6ModPath]; ok && url != "" {
+		catalogURL = url
+	}
+
+	ctlg, err := catalog.NewCatalog(ctx, catalogURL)
 	if err != nil {
 		return nil, k6build.NewWrappedError(k6build.ErrCatalog, err)
 	}
@@ -298,7 +345,7 @@ func (b *Builder) resolveDependencies(
 			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, ErrBuildSemverNotAllowed)
 		}
 		// use a semantic version for the build metadata
-		k6Mod = catalog.Module{Path: k6Path, Version: "v0.0.0+" + buildMetadata}
+		k6Mod = catalog.Module{Path: k6ModPath, Version: "v0.0.0+" + buildMetadata}
 	} else {
 		k6Mod, err = ctlg.Resolve(ctx, catalog.Dependency{Name: k6DependencyName, Constrains: k6Constrains})
 		if err != nil {
@@ -379,7 +426,7 @@ func (b *Builder) buildArtifact(
 	platform string,
 	deps map[string]catalog.Module,
 	artifactBuffer io.Writer,
-) error {
+) (*k6foundry.BuildInfo, error) {
 	ctx, span := tracer.Start(ctx, "Builder.buildArtifact", trace.WithAttributes(
 		attribute.String("k6build.platform", platform),
 	))
@@ -388,7 +435,8 @@ func (b *Builder) buildArtifact(
 	// already checked the platform is valid, should be safe to ignore the error
 	buildPlatform, _ := k6foundry.ParsePlatform(platform)
 
-	k6Version := deps[k6DependencyName].Version
+	k6Mod := deps[k6DependencyName]
+	k6Version := k6Mod.Version
 
 	mods := []k6foundry.Module{}
 	cgoEnabled := false
@@ -422,7 +470,7 @@ func (b *Builder) buildArtifact(
 
 	builder, err := b.foundry.NewFoundry(ctx, builderOpts)
 	if err != nil {
-		return k6build.NewWrappedError(ErrInitializingBuilder, err)
+		return nil, k6build.NewWrappedError(ErrInitializingBuilder, err)
 	}
 
 	// if the version is a build version, we need the build metadata and ignore the version
@@ -435,14 +483,21 @@ func (b *Builder) buildArtifact(
 	b.metrics.buildCounter.Inc()
 	buildTimer := prometheus.NewTimer(b.metrics.buildTimeHistogram)
 
-	_, err = builder.Build(ctx, buildPlatform, k6Version, mods, nil, []string{}, artifactBuffer)
+	buildInfo, err := builder.Build(ctx, buildPlatform, k6Version, mods, nil, []string{}, artifactBuffer)
 	if err != nil {
 		b.metrics.buildsFailedCounter.Inc()
-		return k6build.NewWrappedError(k6build.ErrBuildFailed, err)
+		return nil, k6build.NewWrappedError(k6build.ErrBuildFailed, err)
 	}
 
 	buildTimer.ObserveDuration()
 
-	// TODO: complete artifact info
-	return nil
+	// Cross-check: warn if the module path k6foundry actually used differs from what
+	// the catalog resolved. This should not happen in normal operation but is a useful
+	// signal if catalog entries are misconfigured.
+	if buildInfo.K6ModPath != "" && buildInfo.K6ModPath != k6Mod.Path {
+		span.SetAttributes(attribute.String("k6build.k6_mod_path_mismatch",
+			fmt.Sprintf("catalog=%s foundry=%s", k6Mod.Path, buildInfo.K6ModPath)))
+	}
+
+	return buildInfo, nil
 }

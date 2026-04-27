@@ -81,7 +81,7 @@ type Opts struct {
 // Config defines the configuration for a Builder
 type Config struct {
 	Opts        Opts
-	Catalog     string
+	Catalog     catalog.Catalog
 	Store       store.ObjectStore
 	Foundry     FoundryFactory
 	Registerer  prometheus.Registerer
@@ -92,7 +92,7 @@ type Config struct {
 // Builder implements the BuildService interface
 type Builder struct {
 	opts        Opts
-	catalog     string
+	catalog     catalog.Catalog
 	store       store.ObjectStore
 	foundry     FoundryFactory
 	metrics     *metrics
@@ -102,7 +102,7 @@ type Builder struct {
 
 // New returns a new instance of Builder given a BuilderConfig
 func New(_ context.Context, config Config) (*Builder, error) {
-	if config.Catalog == "" {
+	if config.Catalog == nil {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("catalog cannot be nil"))
 	}
 
@@ -278,11 +278,6 @@ func (b *Builder) resolveDependencies(
 	ctx, span := tracer.Start(ctx, "Builder.resolveDependencies")
 	defer span.End()
 
-	ctlg, err := catalog.NewCatalog(ctx, b.catalog)
-	if err != nil {
-		return nil, k6build.NewWrappedError(k6build.ErrCatalog, err)
-	}
-
 	resolved := map[string]catalog.Module{}
 
 	// check if it is a semver of the form v0.0.0+<build>
@@ -300,7 +295,7 @@ func (b *Builder) resolveDependencies(
 		// use a semantic version for the build metadata
 		k6Mod = catalog.Module{Path: k6Path, Version: "v0.0.0+" + buildMetadata}
 	} else {
-		k6Mod, err = ctlg.Resolve(ctx, catalog.Dependency{Name: k6DependencyName, Constrains: k6Constrains})
+		k6Mod, err = b.catalog.Resolve(ctx, catalog.Dependency{Name: k6DependencyName, Constrains: k6Constrains})
 		if err != nil {
 			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 		}
@@ -308,7 +303,7 @@ func (b *Builder) resolveDependencies(
 	resolved[k6DependencyName] = k6Mod
 
 	for _, d := range deps {
-		m, err := ctlg.Resolve(ctx, catalog.Dependency{Name: d.Name, Constrains: d.Constraints})
+		m, err := b.catalog.Resolve(ctx, catalog.Dependency{Name: d.Name, Constrains: d.Constraints})
 		if err != nil {
 			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 		}

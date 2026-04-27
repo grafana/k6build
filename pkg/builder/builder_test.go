@@ -63,9 +63,14 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 		return nil, fmt.Errorf("creating temporary object store %w", err)
 	}
 
+	ctlg, err := catalog.NewCatalogFromFile(filepath.Join("testdata", "catalog.json"))
+	if err != nil {
+		return nil, fmt.Errorf("creating catalog %w", err)
+	}
+
 	return New(context.Background(), Config{
 		Opts:    Opts{},
-		Catalog: filepath.Join("testdata", "catalog.json"),
+		Catalog: ctlg,
 		Store:   store,
 		Foundry: FoundryFactoryFunction(MockFoundryFactory),
 	})
@@ -512,9 +517,14 @@ k6build_builds_invalid_total %s`,
 				t.Fatalf("creating temporary object store %v", err)
 			}
 
+			ctlg, err := catalog.NewCatalogFromFile(filepath.Join("testdata", "catalog.json"))
+			if err != nil {
+				t.Fatalf("creating catalog %v", err)
+			}
+
 			builder, err := New(context.Background(), Config{
 				Opts:       Opts{},
-				Catalog:    filepath.Join("testdata", "catalog.json"),
+				Catalog:    ctlg,
 				Store:      store,
 				Foundry:    FoundryFactoryFunction(MockFoundryFactory),
 				Registerer: register,

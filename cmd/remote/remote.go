@@ -52,12 +52,13 @@ Extensions:
 // New creates new cobra command for build client command.
 func New() *cobra.Command {
 	var (
-		config   client.BuildServiceClientConfig
-		deps     []string
-		k6       string
-		output   string
-		platform string
-		quiet    bool
+		config    client.BuildServiceClientConfig
+		deps      []string
+		k6        string
+		k6ModPath string
+		output    string
+		platform  string
+		quiet     bool
 	)
 
 	cmd := &cobra.Command{
@@ -84,7 +85,7 @@ func New() *cobra.Command {
 				buildDeps = append(buildDeps, k6build.Dependency{Name: name, Constraints: constrains})
 			}
 
-			artifact, err := client.Build(cmd.Context(), platform, k6, buildDeps)
+			artifact, err := client.Build(cmd.Context(), platform, k6ModPath, k6, buildDeps)
 			if err != nil {
 				return fmt.Errorf("building %w", err)
 			}
@@ -107,6 +108,11 @@ func New() *cobra.Command {
 	cmd.Flags().StringVarP(&config.URL, "server", "s", "http://localhost:8000", "url for build server")
 	cmd.Flags().StringArrayVarP(&deps, "dependency", "d", nil, "list of dependencies in form package:constrains")
 	cmd.Flags().StringVarP(&k6, "k6", "k", "*", "k6 version constrains")
+	cmd.Flags().StringVar(
+		&k6ModPath,
+		"k6modpath",
+		"go.k6.io/k6",
+		"k6 Go module path (e.g. go.k6.io/k6 or go.k6.io/k6/v2); defaults to go.k6.io/k6")
 	cmd.Flags().StringVarP(&platform, "platform", "p", "", "target platform (default GOOS/GOARCH)")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "path to download the custom binary as an executable."+
 		"\nIf not specified, the artifact is not downloaded.")

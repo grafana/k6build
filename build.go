@@ -8,6 +8,11 @@ import (
 	"fmt"
 )
 
+const (
+	// K6ModPath is the Go module path for k6. Used as the default when k6_mod_path is empty.
+	K6ModPath = "go.k6.io/k6"
+)
+
 var (
 	ErrAccessingArtifact     = errors.New("accessing artifact") //nolint:revive
 	ErrBuildFailed           = errors.New("build failed")
@@ -37,6 +42,12 @@ type Artifact struct {
 	Platform string `json:"platform,omitempty"`
 	// binary checksum (sha256)
 	Checksum string `json:"checksum,omitempty"`
+	// K6ModPath is the Go module path of the k6 core used in the build
+	// (e.g. "go.k6.io/k6" or "go.k6.io/k6/v2").
+	K6ModPath string `json:"k6_mod_path,omitempty"`
+	// Warnings contains non-fatal issues detected during the build, such as
+	// an extension depending on a different k6 major version than the one built.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // String returns a text serialization of the Artifact
@@ -74,9 +85,13 @@ func (a Artifact) toString(details bool, sep string) string {
 // BuildService defines the interface for building custom k6 binaries
 type BuildService interface {
 	// Build returns a k6 Artifact that satisfies a set dependencies and version constrains.
-	Build(ctx context.Context, platform string, k6Constrains string, deps []Dependency) (Artifact, error)
+	// k6ModPath is the Go module path for the k6 core (e.g. "go.k6.io/k6" or "go.k6.io/k6/v2").
+	// An empty k6ModPath defaults to K6ModPath.
+	Build(ctx context.Context, platform string, k6ModPath string, k6Constrains string, deps []Dependency) (Artifact, error)
 
 	// Resolve returns the versions that satisfy the given dependency constrains or an error if they
-	// cannot be satisfied
-	Resolve(ctx context.Context, k6Constrains string, deps []Dependency) (map[string]string, error)
+	// cannot be satisfied.
+	// k6ModPath is the Go module path for the k6 core (e.g. "go.k6.io/k6" or "go.k6.io/k6/v2").
+	// An empty k6ModPath defaults to K6ModPath.
+	Resolve(ctx context.Context, k6ModPath string, k6Constrains string, deps []Dependency) (map[string]string, error)
 }

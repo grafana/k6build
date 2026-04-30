@@ -101,11 +101,13 @@ type BuildClient struct {
 func (r *BuildClient) Build(
 	ctx context.Context,
 	platform string,
+	k6ModPath string,
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (k6build.Artifact, error) {
 	buildRequest := api.BuildRequest{
 		Platform:     platform,
+		K6ModPath:    k6ModPath,
 		K6Constrains: k6Constrains,
 		Dependencies: deps,
 	}
@@ -131,10 +133,12 @@ func (r *BuildClient) Build(
 // satisfied
 func (r *BuildClient) Resolve(
 	ctx context.Context,
+	k6ModPath string,
 	k6Constrains string,
 	deps []k6build.Dependency,
 ) (map[string]string, error) {
 	resolveRequest := api.ResolveRequest{
+		K6ModPath:    k6ModPath,
 		K6Constrains: k6Constrains,
 		Dependencies: deps,
 	}

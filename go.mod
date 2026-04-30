@@ -16,7 +16,7 @@ require (
 	github.com/aws/smithy-go v1.24.2
 	github.com/docker/go-connections v0.6.0
 	github.com/google/go-cmp v0.7.0
-	github.com/grafana/k6foundry v0.4.7
+	github.com/grafana/k6foundry v0.5.2
 	github.com/grafana/s3-mock v0.2.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
@@ -103,7 +103,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect

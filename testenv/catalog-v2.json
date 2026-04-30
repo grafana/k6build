@@ -1,0 +1,4 @@
+{
+    "k6": {"module": "go.k6.io/k6/v2", "versions": ["v0.0.0+5e9049460a48"]},
+    "k6/x/faker": {"module": "github.com/grafana/xk6-faker", "versions": ["v0.0.0+051eb6d3ce9a"]}
+}

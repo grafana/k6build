@@ -1,0 +1,4 @@
+{
+    "k6": {"module": "go.k6.io/k6/v2", "versions": ["v2.0.0-rc1"]},
+    "k6/x/testextension": {"module": "github.com/grafana/xk6-test", "versions": ["v0.2.0"]}
+}

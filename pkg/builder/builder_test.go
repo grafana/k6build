@@ -11,12 +11,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/grafana/k6build"
-	"github.com/grafana/k6build/pkg/catalog"
-	"github.com/grafana/k6build/pkg/store/file"
 	"github.com/grafana/k6foundry"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/grafana/k6build"
+	"github.com/grafana/k6build/pkg/catalog"
+	"github.com/grafana/k6build/pkg/store/file"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -70,6 +71,9 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 		Foundry: FoundryFactoryFunction(MockFoundryFactory),
 	})
 }
+
+// defaultK6ModPath is a convenience for tests that don't care about v2 routing.
+const defaultK6ModPath = k6build.K6ModPath
 
 func platform() string {
 	return fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
@@ -125,6 +129,7 @@ func TestBuild(t *testing.T) {
 			artifact, err := buildsrv.Build(
 				context.TODO(),
 				platform(),
+				defaultK6ModPath,
 				tc.k6,
 				tc.deps,
 			)
@@ -206,6 +211,7 @@ func TestResolve(t *testing.T) {
 
 			deps, err := buildsrv.Resolve(
 				context.TODO(),
+				defaultK6ModPath,
 				tc.k6,
 				tc.deps,
 			)
@@ -237,6 +243,7 @@ func TestIdempotentBuild(t *testing.T) {
 	artifact, err := buildsrv.Build(
 		context.TODO(),
 		"linux/amd64",
+		defaultK6ModPath,
 		"v0.1.0",
 		[]k6build.Dependency{
 			{Name: "k6/x/ext", Constraints: "v0.1.0"},
@@ -283,6 +290,7 @@ func TestIdempotentBuild(t *testing.T) {
 				rebuild, err := buildsrv.Build(
 					context.TODO(),
 					tc.platform,
+					defaultK6ModPath,
 					tc.k6,
 					tc.deps,
 				)
@@ -355,6 +363,7 @@ func TestIdempotentBuild(t *testing.T) {
 				rebuild, err := buildsrv.Build(
 					context.TODO(),
 					tc.platform,
+					defaultK6ModPath,
 					tc.k6,
 					tc.deps,
 				)
@@ -368,6 +377,203 @@ func TestIdempotentBuild(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestCatalogSelection tests that the correct catalog (v1 or v2) is selected based on the k6 constraint.
+func TestCatalogSelection(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		title        string
+		k6Constraint string
+		expectK6Ver  string
+		expectK6Path string
+	}{
+		{
+			title:        "v2 constraint routes to v2 catalog",
+			k6Constraint: ">= 2.0.0-0",
+			expectK6Ver:  "v2.0.0-rc1",
+			expectK6Path: "go.k6.io/k6/v2",
+		},
+		{
+			title:        "wildcard routes to v1 catalog",
+			k6Constraint: "*",
+			expectK6Ver:  "v0.57.0",
+			expectK6Path: "go.k6.io/k6",
+		},
+		{
+			title:        "v1 exact version routes to v1 catalog",
+			k6Constraint: "v0.57.0",
+			expectK6Ver:  "v0.57.0",
+			expectK6Path: "go.k6.io/k6",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.title, func(t *testing.T) {
+			t.Parallel()
+
+			store, err := file.NewFileStore(t.TempDir())
+			if err != nil {
+				t.Fatalf("creating temporary object store %v", err)
+			}
+
+			buildsrv, err := New(context.Background(), Config{
+				Opts:    Opts{},
+				Catalog: filepath.Join("testdata", "catalog-v1.json"),
+				Catalogs: map[string]string{
+					"go.k6.io/k6/v2": filepath.Join("testdata", "catalog-v2.json"),
+				},
+				Store:   store,
+				Foundry: FoundryFactoryFunction(MockFoundryFactory),
+			})
+			if err != nil {
+				t.Fatalf("creating builder %v", err)
+			}
+
+			resolved, err := buildsrv.Resolve(context.TODO(), tc.expectK6Path, tc.k6Constraint, []k6build.Dependency{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			k6Ver, ok := resolved["k6"]
+			if !ok {
+				t.Fatalf("k6 not in resolved dependencies")
+			}
+			if k6Ver != tc.expectK6Ver {
+				t.Fatalf("expected k6 version %q got %q", tc.expectK6Ver, k6Ver)
+			}
+		})
+	}
+}
+
+// mockFoundryConfigurable is a mock foundry that returns configurable K6ModPath and Warnings.
+type mockFoundryConfigurable struct {
+	k6ModPath string
+	warnings  []k6foundry.Warning
+}
+
+func (m *mockFoundryConfigurable) Build(
+	_ context.Context,
+	platform k6foundry.Platform,
+	_ string,
+	mods []k6foundry.Module,
+	_ []k6foundry.Module,
+	_ []string,
+	_ io.Writer,
+) (*k6foundry.BuildInfo, error) {
+	modVersions := make(map[string]string)
+	for _, mod := range mods {
+		modVersions[mod.Path] = mod.Version
+	}
+	return &k6foundry.BuildInfo{
+		Platform:    platform.String(),
+		ModVersions: modVersions,
+		K6ModPath:   m.k6ModPath,
+		Warnings:    m.warnings,
+	}, nil
+}
+
+// TestBuildK6ModPath tests that K6ModPath from BuildInfo is propagated to the artifact.
+func TestBuildK6ModPath(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		title        string
+		k6Constraint string
+		k6ModPath    string
+		expectPath   string
+	}{
+		{
+			title:        "k6ModPath is propagated to artifact",
+			k6Constraint: "v0.1.0",
+			k6ModPath:    "go.k6.io/k6",
+			expectPath:   "go.k6.io/k6",
+		},
+		{
+			title:        "empty k6ModPath results in empty artifact field",
+			k6Constraint: "v0.1.0",
+			k6ModPath:    "",
+			expectPath:   "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.title, func(t *testing.T) {
+			t.Parallel()
+
+			store, err := file.NewFileStore(t.TempDir())
+			if err != nil {
+				t.Fatalf("creating temporary object store %v", err)
+			}
+
+			k6ModPath := tc.k6ModPath
+			foundryFactory := FoundryFactoryFunction(func(_ context.Context, _ k6foundry.NativeFoundryOpts) (k6foundry.Foundry, error) {
+				return &mockFoundryConfigurable{k6ModPath: k6ModPath}, nil
+			})
+
+			buildsrv, err := New(context.Background(), Config{
+				Opts:    Opts{},
+				Catalog: filepath.Join("testdata", "catalog.json"),
+				Store:   store,
+				Foundry: foundryFactory,
+			})
+			if err != nil {
+				t.Fatalf("creating builder %v", err)
+			}
+
+			artifact, err := buildsrv.Build(context.TODO(), platform(), defaultK6ModPath, tc.k6Constraint, []k6build.Dependency{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if artifact.K6ModPath != tc.expectPath {
+				t.Fatalf("expected K6ModPath %q got %q", tc.expectPath, artifact.K6ModPath)
+			}
+		})
+	}
+}
+
+// TestBuildWarnings tests that warnings from BuildInfo are propagated to the artifact.
+func TestBuildWarnings(t *testing.T) {
+	t.Parallel()
+
+	store, err := file.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("creating temporary object store %v", err)
+	}
+
+	buildWarnings := []k6foundry.Warning{
+		{Code: k6foundry.WarnK6VersionConflict, Message: "extension requires k6 v1 but building k6 v2"},
+	}
+
+	foundryFactory := FoundryFactoryFunction(func(_ context.Context, _ k6foundry.NativeFoundryOpts) (k6foundry.Foundry, error) {
+		return &mockFoundryConfigurable{warnings: buildWarnings}, nil
+	})
+
+	buildsrv, err := New(context.Background(), Config{
+		Opts:    Opts{},
+		Catalog: filepath.Join("testdata", "catalog.json"),
+		Store:   store,
+		Foundry: foundryFactory,
+	})
+	if err != nil {
+		t.Fatalf("creating builder %v", err)
+	}
+
+	artifact, err := buildsrv.Build(context.TODO(), platform(), defaultK6ModPath, "v0.1.0", []k6build.Dependency{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(artifact.Warnings) != len(buildWarnings) {
+		t.Fatalf("expected %d warnings, got %d", len(buildWarnings), len(artifact.Warnings))
+	}
+
+	expectedWarning := fmt.Sprintf("[%s] %s", buildWarnings[0].Code, buildWarnings[0].Message)
+	if artifact.Warnings[0] != expectedWarning {
+		t.Fatalf("expected warning %q got %q", expectedWarning, artifact.Warnings[0])
+	}
 }
 
 // TestConcurrentBuilds tests that is safe to build the same artifact concurrently and that
@@ -413,6 +619,7 @@ func TestConcurrentBuilds(t *testing.T) {
 			if _, err := buildsrv.Build(
 				context.TODO(),
 				"linux/amd64",
+				defaultK6ModPath,
 				b.k6Ver,
 				b.deps,
 			); err != nil {
@@ -527,6 +734,7 @@ k6build_builds_invalid_total %s`,
 				_, err = builder.Build(
 					context.TODO(),
 					"linux/amd64",
+					defaultK6ModPath,
 					k6,
 					[]k6build.Dependency{},
 				)

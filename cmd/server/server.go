@@ -222,6 +222,7 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
 type serverConfig struct {
 	allowBuildSemvers bool
 	catalogURL        string
+	catalogsByModPath []string
 	copyGoEnv         bool
 	enableCgo         bool
 	goEnv             map[string]string
@@ -315,6 +316,9 @@ func New() *cobra.Command { //nolint:funlen
 		catalog.DefaultCatalogURL,
 		"dependencies catalog. Can be path to a local file or an URL.",
 	)
+	cmd.Flags().StringArrayVar(&cfg.catalogsByModPath, "catalog-for", nil,
+		"catalog for a specific k6 module path, in the form module=url (repeatable).\n"+
+			"Example: --catalog-for go.k6.io/k6/v2=/path/to/catalog-v2.json")
 	cmd.Flags().StringVar(
 		&cfg.storeURL,
 		"store-url",
@@ -427,6 +431,11 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 	}
 	cfg.goEnv["CGO_ENABLED"] = cgoEnabled
 
+	catalogs, err := builder.ParseCatalogs(cfg.catalogsByModPath)
+	if err != nil {
+		return nil, err
+	}
+
 	config := builder.Config{
 		Opts: builder.Opts{
 			GoOpts: builder.GoOpts{
@@ -437,6 +446,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 			AllowBuildSemvers: cfg.allowBuildSemvers,
 		},
 		Catalog:    cfg.catalogURL,
+		Catalogs:   catalogs,
 		Store:      store,
 		Registerer: prometheus.DefaultRegisterer,
 		Lock:       lock,

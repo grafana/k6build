@@ -21,6 +21,8 @@ type TestEnvConfig struct {
 	WorkDir string
 	// CatalogURL is the URL or path to the extension catalog. If empty, the default catalog will be used
 	CatalogURL string
+	// CatalogsByModPath maps a k6 module path to the catalog URL to use for that module path.
+	CatalogsByModPath map[string]string
 }
 
 // TestEnv is a test environment for the provider tests
@@ -78,8 +80,9 @@ func NewTestEnv(cfg TestEnvConfig) (*TestEnv, error) {
 				CopyGoEnv: true,
 			},
 		},
-		Catalog: catalogURL,
-		Store:   storeClient,
+		Catalog:  catalogURL,
+		Catalogs: cfg.CatalogsByModPath,
+		Store:    storeClient,
 	}
 	builder, err := builder.New(context.TODO(), buildConfig)
 	if err != nil {

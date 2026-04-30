@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/grafana/k6build"
+	"github.com/grafana/k6build/pkg/builder"
 	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/local"
 
@@ -54,12 +55,14 @@ k6build local -k v0.50.0 -e GOPROXY=http://localhost:80 -q
 // New creates new cobra command for local build command.
 func New() *cobra.Command { //nolint:funlen
 	var (
-		config   local.Config
-		deps     []string
-		k6       string
-		output   string
-		platform string
-		quiet    bool
+		config            local.Config
+		catalogsByModPath []string
+		deps              []string
+		k6                string
+		k6ModPath         string
+		output            string
+		platform          string
+		quiet             bool
 	)
 
 	cmd := &cobra.Command{
@@ -72,6 +75,12 @@ func New() *cobra.Command { //nolint:funlen
 		// this is needed to prevent cobra to print errors reported by subcommands in the stderr
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			catalogs, err := builder.ParseCatalogs(catalogsByModPath)
+			if err != nil {
+				return err
+			}
+			config.Catalogs = catalogs
+
 			srv, err := local.NewBuildService(cmd.Context(), config)
 			if err != nil {
 				return fmt.Errorf("configuring the build service %w", err)
@@ -86,7 +95,7 @@ func New() *cobra.Command { //nolint:funlen
 				buildDeps = append(buildDeps, k6build.Dependency{Name: name, Constraints: constrains})
 			}
 
-			artifact, err := srv.Build(cmd.Context(), platform, k6, buildDeps)
+			artifact, err := srv.Build(cmd.Context(), platform, k6ModPath, k6, buildDeps)
 			if err != nil {
 				return fmt.Errorf("building %w", err)
 			}
@@ -123,9 +132,17 @@ func New() *cobra.Command { //nolint:funlen
 
 	cmd.Flags().StringArrayVarP(&deps, "dependency", "d", nil, "list of dependencies in form package:constrains")
 	cmd.Flags().StringVarP(&k6, "k6", "k", "*", "k6 version constrains")
+	cmd.Flags().StringVar(
+		&k6ModPath,
+		"k6modpath",
+		"go.k6.io/k6",
+		"k6 Go module path (e.g. go.k6.io/k6 or go.k6.io/k6/v2); defaults to go.k6.io/k6")
 	cmd.Flags().StringVarP(&platform, "platform", "p", "", "target platform (default GOOS/GOARCH)")
 	_ = cmd.MarkFlagRequired("platform")
 	cmd.Flags().StringVarP(&config.Catalog, "catalog", "c", catalog.DefaultCatalogURL, "dependencies catalog")
+	cmd.Flags().StringArrayVar(&catalogsByModPath, "catalog-for", nil,
+		"catalog for a specific k6 module path, in the form module=url (repeatable).\n"+
+			"Example: --catalog-for go.k6.io/k6/v2=/path/to/catalog-v2.json")
 	cmd.Flags().StringVarP(&config.StoreDir, "store-dir", "f", "/tmp/k6build/store", "object store dir")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "print build process output")
 	cmd.Flags().BoolVarP(&config.CopyGoEnv, "copy-go-env", "g", true, "copy go environment")

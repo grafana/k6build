@@ -1,6 +1,6 @@
 module github.com/grafana/k6build
 
-go 1.25.8
+go 1.26.3
 
 retract (
 	v0.5.7 // corrupted cache

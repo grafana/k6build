@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.25.8
+ARG GO_VERSION=1.26.3
 ARG VARIANT=bookworm
 FROM golang:${GO_VERSION}-${VARIANT} as builder
 

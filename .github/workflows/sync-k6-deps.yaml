@@ -2,16 +2,16 @@ name: Sync k6 core dependencies
 
 on:
   schedule:
-    - cron: 0 16 * * 0  # Every Sunday at 16:00
+    - cron: 0 16 * * 0 # Every Sunday at 16:00
   workflow_dispatch: {}
 
 jobs:
   sync-k6-deps:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-x64
     timeout-minutes: 10
     permissions:
-      contents: write  # Push branch.
-      pull-requests: write  # Create PR.
+      contents: write # Push branch.
+      pull-requests: write # Create PR.
     env:
       GH_TOKEN: ${{ github.token }}
       BRANCH_NAME: ci-sync-deps
@@ -39,5 +39,5 @@ jobs:
           git checkout -b "$BRANCH_NAME"
           git commit -am "go.mod: sync dependencies with k6 core"
           git push -f -u origin "$BRANCH_NAME"
-          
-          gh pr create --fill --body-file depsync-pr-body.txt || true # It is okay to fail if a PR already exists. 
+
+          gh pr create --fill --body-file depsync-pr-body.txt || true # It is okay to fail if a PR already exists.

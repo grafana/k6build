@@ -9,6 +9,9 @@ on:
       - v*
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     uses: grafana/k6-ci/.github/workflows/all.yml@143ec80c1678ae96a54b82389ea862d4748c27e1 # main

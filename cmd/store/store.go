@@ -85,11 +85,13 @@ func New() *cobra.Command { //nolint:funlen
 			}
 
 			log := slog.New(
-				slog.NewTextHandler(
-					os.Stderr, //nolint:forbidigo
-					&slog.HandlerOptions{
-						Level: ll,
-					},
+				tracing.NewSlogHandler(
+					slog.NewTextHandler(
+						os.Stderr, //nolint:forbidigo
+						&slog.HandlerOptions{
+							Level: ll,
+						},
+					),
 				),
 			)
 

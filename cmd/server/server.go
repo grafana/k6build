@@ -402,11 +402,13 @@ func getLogger(logLevel string) (*slog.Logger, error) {
 	}
 
 	return slog.New(
-		slog.NewTextHandler(
-			os.Stderr, //nolint:forbidigo
-			&slog.HandlerOptions{
-				Level: ll,
-			},
+		tracing.NewSlogHandler(
+			slog.NewTextHandler(
+				os.Stderr, //nolint:forbidigo
+				&slog.HandlerOptions{
+					Level: ll,
+				},
+			),
 		),
 	), nil
 }

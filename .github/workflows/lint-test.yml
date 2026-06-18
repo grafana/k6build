@@ -9,6 +9,9 @@ on:
       - v*
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     # Matches the permissions the reusable workflow declares for itself, so it

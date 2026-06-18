@@ -3,11 +3,6 @@ name: Release
 # Cut a tagged release: tag the current main HEAD, create a GitHub release with
 # auto-generated notes, and build & push the multi-arch image for that version.
 #
-# This is generic release plumbing — nothing cloud-specific — so it lives here in
-# the public repo. It can be run manually by maintainers, or dispatched by the
-# k6-cloud-backend-release pipeline (which passes an explicit `tag` it has already
-# computed).
-#
 # It deliberately does NOT rely on the `publish` workflow firing off the tag push:
 # a tag created by the default GITHUB_TOKEN does not trigger other workflows, so
 # this job builds and pushes the image itself. The image is pushed BEFORE the

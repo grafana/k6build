@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/grafana/k6foundry"
 
 	"github.com/grafana/k6build"
@@ -332,20 +333,25 @@ func (b *Builder) resolveDependencies(
 
 	resolved := map[string]catalog.Module{}
 
-	// check if it is a semver of the form v0.0.0+<build>
-	// if it is, we don't check with the catalog, but instead we use
-	// the build metadata as version when building this module
-	var k6Mod catalog.Module
-	buildMetadata, err := hasBuildMetadata(k6Constrains)
+	// A pseudo-version or a v0.0.0+<commit> build-metadata semver both reference a
+	// commit that is not in the catalog, so we build straight from the commit.
+	commit, err := pseudoVersionCommit(k6Constrains)
 	if err != nil {
 		return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
 	}
-	if buildMetadata != "" {
+	if commit == "" {
+		commit, err = hasBuildMetadata(k6Constrains)
+		if err != nil {
+			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, err)
+		}
+	}
+
+	var k6Mod catalog.Module
+	if commit != "" {
 		if !b.opts.AllowBuildSemvers {
 			return nil, k6build.NewWrappedError(k6build.ErrInvalidParameters, ErrBuildSemverNotAllowed)
 		}
-		// use a semantic version for the build metadata
-		k6Mod = catalog.Module{Path: k6ModPath, Version: "v0.0.0+" + buildMetadata}
+		k6Mod = catalog.Module{Path: k6ModPath, Version: "v0.0.0+" + commit}
 	} else {
 		k6Mod, err = ctlg.Resolve(ctx, catalog.Dependency{Name: k6DependencyName, Constrains: k6Constrains})
 		if err != nil {
@@ -363,6 +369,47 @@ func (b *Builder) resolveDependencies(
 	}
 
 	return resolved, nil
+}
+
+// pseudoVersionCommit returns the commit referenced by a Go pseudo-version such as
+// v1.7.2-0.20260603164357-0c72fa6d4511 (here 0c72fa6d4511), or "" if the constrain
+// is not a pseudo-version. Only an exact match is allowed, optionally with a "=".
+func pseudoVersionCommit(constrain string) (string, error) {
+	// strip a leading comparison operator so the rest parses as a plain semver
+	ver := strings.TrimLeft(constrain, "=~><^! ")
+	op := strings.TrimSpace(constrain[:len(constrain)-len(ver)])
+
+	v, err := semver.NewVersion(strings.TrimSpace(ver))
+	if err != nil {
+		return "", nil //nolint:nilerr
+	}
+
+	pre := v.Prerelease()
+	if pre == "" {
+		return "", nil
+	}
+
+	// the commit is in the last dot-separated segment, as <14-digit-timestamp>-<commit>
+	segments := strings.Split(pre, ".")
+	timestamp, commit, found := strings.Cut(segments[len(segments)-1], "-")
+	if !found || commit == "" {
+		return "", nil
+	}
+
+	if len(timestamp) != 14 {
+		return "", nil
+	}
+	for _, c := range timestamp {
+		if c < '0' || c > '9' {
+			return "", nil
+		}
+	}
+
+	if op != "" && op != "=" {
+		return "", fmt.Errorf("only exact match is allowed for pseudo-versions")
+	}
+
+	return commit, nil
 }
 
 // hasBuildMetadata checks if the constrain references a version with a build metadata.

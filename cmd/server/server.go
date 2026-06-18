@@ -222,6 +222,7 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
 type serverConfig struct {
 	allowBuildSemvers bool
 	catalogURL        string
+	catalogTTL        time.Duration
 	catalogsByModPath []string
 	copyGoEnv         bool
 	enableCgo         bool
@@ -277,7 +278,7 @@ func New() *cobra.Command { //nolint:funlen
 				log.Warn("CGO is enabled by default. Use --enable-cgo=false to disable it.")
 			}
 
-			buildSrv, err := cfg.getBuildService(cmd.Context())
+			buildSrv, err := cfg.getBuildService(cmd.Context(), log)
 			if err != nil {
 				return err
 			}
@@ -319,6 +320,13 @@ func New() *cobra.Command { //nolint:funlen
 	cmd.Flags().StringArrayVar(&cfg.catalogsByModPath, "catalog-for", nil,
 		"catalog for a specific k6 module path, in the form module=url (repeatable).\n"+
 			"Example: --catalog-for go.k6.io/k6/v2=/path/to/catalog-v2.json")
+	cmd.Flags().DurationVar(
+		&cfg.catalogTTL,
+		"catalog-ttl",
+		30*time.Minute,
+		"how long a fetched catalog is cached before being refreshed. On a resolution"+
+			" miss a refresh is forced regardless of this value. A value of 0 disables caching.",
+	)
 	cmd.Flags().StringVar(
 		&cfg.storeURL,
 		"store-url",
@@ -413,7 +421,36 @@ func getLogger(logLevel string) (*slog.Logger, error) {
 	), nil
 }
 
-func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildService, error) {
+// getCatalogs builds the default catalog and the per-module-path catalogs,
+// each wrapped in a CachedCatalog so the remote catalog is fetched once on boot
+// and then served from memory (see catalog.CachedCatalog).
+func (cfg serverConfig) getCatalogs(
+	ctx context.Context,
+	log *slog.Logger,
+) (catalog.Catalog, map[string]catalog.Catalog, error) {
+	defaultCatalog, err := catalog.NewCachedCatalog(ctx, cfg.catalogURL, cfg.catalogTTL, log)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating catalog: %w", err)
+	}
+
+	byModPath, err := builder.ParseCatalogs(cfg.catalogsByModPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	catalogs := make(map[string]catalog.Catalog, len(byModPath))
+	for modPath, location := range byModPath {
+		c, err := catalog.NewCachedCatalog(ctx, location, cfg.catalogTTL, log)
+		if err != nil {
+			return nil, nil, fmt.Errorf("creating catalog for %s: %w", modPath, err)
+		}
+		catalogs[modPath] = c
+	}
+
+	return defaultCatalog, catalogs, nil
+}
+
+func (cfg serverConfig) getBuildService(ctx context.Context, log *slog.Logger) (k6build.BuildService, error) {
 	store, err := cfg.getStore() //nolint:contextcheck
 	if err != nil {
 		return nil, err
@@ -433,7 +470,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 	}
 	cfg.goEnv["CGO_ENABLED"] = cgoEnabled
 
-	catalogs, err := builder.ParseCatalogs(cfg.catalogsByModPath)
+	defaultCatalog, catalogs, err := cfg.getCatalogs(ctx, log)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +484,7 @@ func (cfg serverConfig) getBuildService(ctx context.Context) (k6build.BuildServi
 			Verbose:           cfg.verbose,
 			AllowBuildSemvers: cfg.allowBuildSemvers,
 		},
-		Catalog:    cfg.catalogURL,
+		Catalog:    defaultCatalog,
 		Catalogs:   catalogs,
 		Store:      store,
 		Registerer: prometheus.DefaultRegisterer,

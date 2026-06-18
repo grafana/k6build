@@ -3,9 +3,11 @@ package local
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/grafana/k6build"
 	"github.com/grafana/k6build/pkg/builder"
+	"github.com/grafana/k6build/pkg/catalog"
 	"github.com/grafana/k6build/pkg/store/file"
 )
 
@@ -34,10 +36,27 @@ func NewBuildService(ctx context.Context, config Config) (k6build.BuildService, 
 		return nil, k6build.NewWrappedError(builder.ErrInitializingBuilder, err)
 	}
 
+	// A local build is a one-shot operation, so the catalogs are loaded directly
+	// without caching.
+	ctlg, err := catalog.NewCatalog(ctx, config.Catalog)
+	if err != nil {
+		return nil, k6build.NewWrappedError(builder.ErrInitializingBuilder, err)
+	}
+
+	catalogs := make(map[string]catalog.Catalog, len(config.Catalogs))
+	for modPath, location := range config.Catalogs {
+		c, err := catalog.NewCatalog(ctx, location)
+		if err != nil {
+			return nil, k6build.NewWrappedError(builder.ErrInitializingBuilder,
+				fmt.Errorf("catalog for %s: %w", modPath, err))
+		}
+		catalogs[modPath] = c
+	}
+
 	return builder.New(ctx, builder.Config{
 		Opts:     config.Opts,
-		Catalog:  config.Catalog,
-		Catalogs: config.Catalogs,
+		Catalog:  ctlg,
+		Catalogs: catalogs,
 		Store:    store,
 	})
 }

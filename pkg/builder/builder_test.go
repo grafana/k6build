@@ -64,9 +64,14 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 		return nil, fmt.Errorf("creating temporary object store %w", err)
 	}
 
+	ctlg, err := catalog.NewCatalogFromFile(filepath.Join("testdata", "catalog.json"))
+	if err != nil {
+		return nil, fmt.Errorf("creating catalog %w", err)
+	}
+
 	return New(context.Background(), Config{
 		Opts:    Opts{},
-		Catalog: filepath.Join("testdata", "catalog.json"),
+		Catalog: ctlg,
 		Store:   store,
 		Foundry: FoundryFactoryFunction(MockFoundryFactory),
 	})
@@ -74,6 +79,16 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 
 // defaultK6ModPath is a convenience for tests that don't care about v2 routing.
 const defaultK6ModPath = k6build.K6ModPath
+
+// mustCatalog loads a catalog from a testdata file, failing the test on error.
+func mustCatalog(t *testing.T, file string) catalog.Catalog {
+	t.Helper()
+	ctlg, err := catalog.NewCatalogFromFile(file)
+	if err != nil {
+		t.Fatalf("creating catalog %v", err)
+	}
+	return ctlg
+}
 
 func platform() string {
 	return fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
@@ -418,11 +433,20 @@ func TestCatalogSelection(t *testing.T) {
 				t.Fatalf("creating temporary object store %v", err)
 			}
 
+			catalogV1, err := catalog.NewCatalogFromFile(filepath.Join("testdata", "catalog-v1.json"))
+			if err != nil {
+				t.Fatalf("creating v1 catalog %v", err)
+			}
+			catalogV2, err := catalog.NewCatalogFromFile(filepath.Join("testdata", "catalog-v2.json"))
+			if err != nil {
+				t.Fatalf("creating v2 catalog %v", err)
+			}
+
 			buildsrv, err := New(context.Background(), Config{
 				Opts:    Opts{},
-				Catalog: filepath.Join("testdata", "catalog-v1.json"),
-				Catalogs: map[string]string{
-					"go.k6.io/k6/v2": filepath.Join("testdata", "catalog-v2.json"),
+				Catalog: catalogV1,
+				Catalogs: map[string]catalog.Catalog{
+					"go.k6.io/k6/v2": catalogV2,
 				},
 				Store:   store,
 				Foundry: FoundryFactoryFunction(MockFoundryFactory),
@@ -514,7 +538,7 @@ func TestBuildK6ModPath(t *testing.T) {
 
 			buildsrv, err := New(context.Background(), Config{
 				Opts:    Opts{},
-				Catalog: filepath.Join("testdata", "catalog.json"),
+				Catalog: mustCatalog(t, filepath.Join("testdata", "catalog.json")),
 				Store:   store,
 				Foundry: foundryFactory,
 			})
@@ -553,7 +577,7 @@ func TestBuildWarnings(t *testing.T) {
 
 	buildsrv, err := New(context.Background(), Config{
 		Opts:    Opts{},
-		Catalog: filepath.Join("testdata", "catalog.json"),
+		Catalog: mustCatalog(t, filepath.Join("testdata", "catalog.json")),
 		Store:   store,
 		Foundry: foundryFactory,
 	})
@@ -721,7 +745,7 @@ k6build_builds_invalid_total %s`,
 
 			builder, err := New(context.Background(), Config{
 				Opts:       Opts{},
-				Catalog:    filepath.Join("testdata", "catalog.json"),
+				Catalog:    mustCatalog(t, filepath.Join("testdata", "catalog.json")),
 				Store:      store,
 				Foundry:    FoundryFactoryFunction(MockFoundryFactory),
 				Registerer: register,

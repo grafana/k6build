@@ -74,14 +74,26 @@ func NewTestEnv(cfg TestEnvConfig) (*TestEnv, error) {
 	if catalogURL == "" {
 		catalogURL = catalog.DefaultCatalogURL
 	}
+	ctlg, err := catalog.NewCatalog(context.TODO(), catalogURL)
+	if err != nil {
+		return nil, fmt.Errorf("catalog setup %w", err)
+	}
+	catalogs := make(map[string]catalog.Catalog, len(cfg.CatalogsByModPath))
+	for modPath, location := range cfg.CatalogsByModPath {
+		c, err := catalog.NewCatalog(context.TODO(), location)
+		if err != nil {
+			return nil, fmt.Errorf("catalog for %s setup %w", modPath, err)
+		}
+		catalogs[modPath] = c
+	}
 	buildConfig := builder.Config{
 		Opts: builder.Opts{
 			GoOpts: builder.GoOpts{
 				CopyGoEnv: true,
 			},
 		},
-		Catalog:  catalogURL,
-		Catalogs: cfg.CatalogsByModPath,
+		Catalog:  ctlg,
+		Catalogs: catalogs,
 		Store:    storeClient,
 	}
 	builder, err := builder.New(context.TODO(), buildConfig)

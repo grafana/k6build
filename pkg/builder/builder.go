@@ -81,11 +81,11 @@ type Opts struct {
 // Config defines the configuration for a Builder
 type Config struct {
 	Opts    Opts
-	Catalog string
-	// Catalogs maps a k6 module path (e.g. "go.k6.io/k6/v2") to the catalog URL
-	// to use when a build request specifies that module path. If a module path is
+	Catalog catalog.Catalog
+	// Catalogs maps a k6 module path (e.g. "go.k6.io/k6/v2") to the catalog to
+	// use when a build request specifies that module path. If a module path is
 	// not in this map, Catalog is used as the fallback.
-	Catalogs    map[string]string
+	Catalogs    map[string]catalog.Catalog
 	Store       store.ObjectStore
 	Foundry     FoundryFactory
 	Registerer  prometheus.Registerer
@@ -117,8 +117,8 @@ func ParseCatalogs(entries []string) (map[string]string, error) {
 // Builder implements the BuildService interface
 type Builder struct {
 	opts        Opts
-	catalog     string
-	catalogs    map[string]string
+	catalog     catalog.Catalog
+	catalogs    map[string]catalog.Catalog
 	store       store.ObjectStore
 	foundry     FoundryFactory
 	metrics     *metrics
@@ -128,7 +128,7 @@ type Builder struct {
 
 // New returns a new instance of Builder given a BuilderConfig
 func New(_ context.Context, config Config) (*Builder, error) {
-	if config.Catalog == "" {
+	if config.Catalog == nil {
 		return nil, k6build.NewWrappedError(ErrInitializingBuilder, errors.New("catalog cannot be nil"))
 	}
 
@@ -320,14 +320,9 @@ func (b *Builder) resolveDependencies(
 		k6ModPath = k6build.K6ModPath
 	}
 
-	catalogURL := b.catalog
-	if url, ok := b.catalogs[k6ModPath]; ok && url != "" {
-		catalogURL = url
-	}
-
-	ctlg, err := catalog.NewCatalog(ctx, catalogURL)
-	if err != nil {
-		return nil, k6build.NewWrappedError(k6build.ErrCatalog, err)
+	ctlg := b.catalog
+	if c, ok := b.catalogs[k6ModPath]; ok && c != nil {
+		ctlg = c
 	}
 
 	resolved := map[string]catalog.Module{}

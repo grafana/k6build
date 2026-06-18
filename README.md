@@ -177,18 +177,21 @@ k6build local -k v0.50.0 -e GOPROXY=http://localhost:80 -q
 ## Flags
 
 ```
-      --allow-build-semvers      allow building versions with build metadata (e.g v0.0.0+build).
-  -c, --catalog string           dependencies catalog (default "https://registry.k6.io/catalog.json")
-  -g, --copy-go-env              copy go environment (default true)
-  -d, --dependency stringArray   list of dependencies in form package:constrains
-  -e, --env stringToString       build environment variables (default [])
-  -h, --help                     help for local
-  -k, --k6 string                k6 version constrains (default "*")
-  -o, --output string            path to put the binary as an executable. (default "k6")
-  -p, --platform string          target platform (default GOOS/GOARCH)
-  -q, --quiet                    don't print artifact's details
-  -f, --store-dir string         object store dir (default "/tmp/k6build/store")
-  -v, --verbose                  print build process output
+      --allow-build-semvers       allow building versions with build metadata (e.g v0.0.0+build).
+  -c, --catalog string            dependencies catalog (default "https://registry.k6.io/catalog.json")
+      --catalog-for stringArray   catalog for a specific k6 module path, in the form module=url (repeatable).
+                                  Example: --catalog-for go.k6.io/k6/v2=/path/to/catalog-v2.json
+  -g, --copy-go-env               copy go environment (default true)
+  -d, --dependency stringArray    list of dependencies in form package:constrains
+  -e, --env stringToString        build environment variables (default [])
+  -h, --help                      help for local
+  -k, --k6 string                 k6 version constrains (default "*")
+      --k6modpath string          k6 Go module path (e.g. go.k6.io/k6 or go.k6.io/k6/v2); defaults to go.k6.io/k6 (default "go.k6.io/k6")
+  -o, --output string             path to put the binary as an executable. (default "k6")
+  -p, --platform string           target platform (default GOOS/GOARCH)
+  -q, --quiet                     don't print artifact's details
+  -f, --store-dir string          object store dir (default "/tmp/k6build/store")
+  -v, --verbose                   print build process output
 ```
 
 ## SEE ALSO
@@ -251,6 +254,7 @@ Extensions:
   -d, --dependency stringArray   list of dependencies in form package:constrains
   -h, --help                     help for remote
   -k, --k6 string                k6 version constrains (default "*")
+      --k6modpath string         k6 Go module path (e.g. go.k6.io/k6 or go.k6.io/k6/v2); defaults to go.k6.io/k6 (default "go.k6.io/k6")
   -o, --output string            path to download the custom binary as an executable.
                                  If not specified, the artifact is not downloaded.
   -p, --platform string          target platform (default GOOS/GOARCH)
@@ -360,7 +364,8 @@ Example
 
 Force a rebuild bypassing the cache:
 
-	curl -X GET "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0&nocache=true" | jq .
+	curl -X GET \
+	  "http://localhost:8000/build?platform=linux/amd64&k6=v1.4.0&dep=k6/x/kubernetes:>v0.8.0&nocache=true" | jq .
 
 Caching
 
@@ -476,11 +481,15 @@ k6build server --s3-endpoint http://localhost:4566 --store-bucket k6build
       --build-lock string            lock to prevent concurrent builds: 'local' or 's3' (across instances) (default "local")
       --cache-max-age duration       chache max-time for artifacts
   -c, --catalog string               dependencies catalog. Can be path to a local file or an URL. (default "https://registry.k6.io/catalog.json")
+      --catalog-for stringArray      catalog for a specific k6 module path, in the form module=url (repeatable).
+                                     Example: --catalog-for go.k6.io/k6/v2=/path/to/catalog-v2.json
+      --catalog-ttl duration         how long a fetched catalog is cached before being refreshed. On a resolution miss a refresh is forced regardless of this value. A value of 0 disables caching. (default 30m0s)
   -g, --copy-go-env                  copy go environment (default true)
       --enable-cgo                   enable CGO for building binaries.
   -e, --env stringToString           build environment variables (default [])
   -h, --help                         help for server
   -l, --log-level string             log level (default "INFO")
+      --otel-endpoint string         OTLP gRPC endpoint for traces (e.g. localhost:4317). If empty, tracing is disabled.
   -p, --port int                     port server will listen (default 8000)
       --s3-bucket string             s3 bucket for storing binaries
       --s3-endpoint string           s3 endpoint
@@ -551,6 +560,7 @@ curl http://external.url:9000/store/objectID/download
                                     If not specified http://localhost:<port> is used
   -h, --help                        help for store
   -l, --log-level string            log level (default "INFO")
+      --otel-endpoint string        OTLP gRPC endpoint for traces (e.g. localhost:4317). If empty, tracing is disabled.
   -p, --port int                    port server will listen (default 9000)
       --shutdown-timeout duration   maximum time to wait for graceful shutdown (default 10s)
   -c, --store-dir string            object store directory (default "/tmp/k6build/store")

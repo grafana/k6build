@@ -67,32 +67,50 @@ TODO: use [k6-operator](https://github.com/grafana/k6-operator) for running the 
 
 ## Releasing
 
-The release process for k6build involves tagging, building a Docker image, and creating a GitHub release.
+The recommended way to cut a release is the [`Release` workflow](.github/workflows/release.yaml). In a
+single run it tags `main`'s HEAD, builds and pushes the multi-architecture (`linux/amd64`,
+`linux/arm64`) Docker image to `ghcr.io/grafana/k6build:<tag>`, and creates a GitHub release with
+auto-generated notes.
 
-### 1. Create and push a tag
+### Cut a release from GitHub Actions (recommended)
 
-Create an annotated tag following semantic versioning with a `v` prefix and push it:
+Maintainers can run it from the UI or the CLI:
 
-```bash
-git tag -a v0.5.0 -m "Release v0.5.0"
-git push origin v0.5.0
-```
+- **UI:** go to **Actions → Release → Run workflow**, select the `main` branch, and either leave
+  **tag** empty to minor-bump the latest release (`vX.Y.Z` → `vX.(Y+1).0`) or set an explicit version
+  such as `v0.7.0`.
+- **CLI:**
 
-### 2. Docker image build (automatic)
+  ```bash
+  # minor auto-bump of the latest release
+  gh workflow run release.yaml --repo grafana/k6build --ref main
 
-Pushing the tag triggers the [publish workflow](.github/workflows/release.yaml), which builds and pushes a multi-architecture (`linux/amd64`, `linux/arm64`) Docker image to `ghcr.io/grafana/k6build:<tag>`.
+  # explicit version
+  gh workflow run release.yaml --repo grafana/k6build --ref main -f tag=v0.7.0
+  ```
 
-Pushes to `main` (without a tag) publish the image as `ghcr.io/grafana/k6build:latest`.
+The workflow is idempotent: if `main` has no new commits since the latest tag it does nothing. The
+image is pushed before the release is cut, so a published release always has a matching image. This is
+also exactly how the k6-cloud backend release pipeline releases k6build, so a manual run and a pipeline
+run do the same thing.
 
-### 3. Create a GitHub release (manual)
+### Manual release (fallback)
 
-After the CI workflow completes, manually create a GitHub release for the tag:
+If you need to release without the workflow:
 
-1. Go to the repository's **Releases** page.
-2. Click **Draft a new release**.
-3. Select the tag you just pushed.
-4. Add release notes describing the changes.
-5. Publish the release.
+1. Create and push an annotated tag following semantic versioning with a `v` prefix:
+
+   ```bash
+   git tag -a v0.7.0 -m "Release v0.7.0"
+   git push origin v0.7.0
+   ```
+
+   Pushing the tag triggers the [publish workflow](.github/workflows/publish.yaml), which builds and
+   pushes the multi-architecture image to `ghcr.io/grafana/k6build:<tag>`. (Pushes to `main` without a
+   tag publish `ghcr.io/grafana/k6build:latest`.)
+
+2. Create a GitHub release for the tag from the repository's **Releases** page: **Draft a new release**
+   → select the tag → add release notes → **Publish release**.
 
 <!-- #region cli -->
 # k6build

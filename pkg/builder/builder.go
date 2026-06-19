@@ -285,7 +285,7 @@ func (b *Builder) Build( //nolint:funlen
 		ID:           id,
 		Checksum:     artifactObject.Checksum,
 		URL:          artifactObject.URL,
-		Dependencies: resolvedVersions(resolved),
+		Dependencies: canonicalVersions(resolved, buildInfo.ModVersions),
 		Platform:     platform,
 		K6ModPath:    buildInfo.K6ModPath,
 		Warnings:     warnings,
@@ -463,6 +463,23 @@ func resolvedVersions(deps map[string]catalog.Module) map[string]string {
 
 	for d, m := range deps {
 		versions[d] = m.Version
+	}
+
+	return versions
+}
+
+// canonicalVersions reports the dependency versions the build actually used, as
+// reported by go list -m via buildInfo.ModVersions. This resolves a v0.0.0+<commit>
+// build-metadata version to the canonical Go pseudo-version go assigned the commit
+// (e.g. v1.7.2-0.20260603164357-0c72fa6d4511). Dependencies missing from the build
+// info fall back to the version resolved from the catalog.
+func canonicalVersions(deps map[string]catalog.Module, modVersions map[string]string) map[string]string {
+	versions := resolvedVersions(deps)
+
+	for name, m := range deps {
+		if actual := modVersions[m.Path]; actual != "" {
+			versions[name] = actual
+		}
 	}
 
 	return versions

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"path/filepath"
 	"testing"
 
@@ -106,6 +107,9 @@ type recordingFoundry struct {
 	opts      k6foundry.NativeFoundryOpts
 	k6Version string
 	mods      []k6foundry.Module
+	// modVersions, if set, is merged into the returned BuildInfo.ModVersions
+	// (keyed by module path) to simulate the canonical versions go list -m reports.
+	modVersions map[string]string
 }
 
 func (m *recordingFoundry) Build(
@@ -124,6 +128,7 @@ func (m *recordingFoundry) Build(
 	for _, mod := range mods {
 		modVersions[mod.Path] = mod.Version
 	}
+	maps.Copy(modVersions, m.modVersions)
 	return &k6foundry.BuildInfo{
 		Platform:    platform.String(),
 		ModVersions: modVersions,
@@ -168,8 +173,8 @@ func newRecordingBuilder(t *testing.T, k6ModPath string, allowBuildSemvers bool)
 func TestResolvePseudoVersion(t *testing.T) {
 	t.Parallel()
 
-	// the pseudo-version is normalized to v0.0.0+<commit>, the same form used for
-	// build-metadata semvers.
+	// Resolve does not build, so the commit cannot be resolved to its canonical
+	// pseudo-version; it is normalized to v0.0.0+<commit>.
 	const (
 		pseudo  = "v1.7.2-0.20260603164357-0c72fa6d4511"
 		resolve = "v0.0.0+0c72fa6d4511"
@@ -216,15 +221,17 @@ func TestBuildPseudoVersion(t *testing.T) {
 	)
 
 	buildsrv, rec := newRecordingBuilder(t, defaultK6ModPath, true)
+	// the build resolves the commit to its canonical pseudo-version
+	rec.modVersions = map[string]string{defaultK6ModPath: pseudo}
 
 	artifact, err := buildsrv.Build(t.Context(), platform(), defaultK6ModPath, pseudo, []k6build.Dependency{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// the artifact reports the normalized v0.0.0+<commit> version
-	if got := artifact.Dependencies["k6"]; got != "v0.0.0+"+commit {
-		t.Fatalf("expected k6 version %q in artifact, got %q", "v0.0.0+"+commit, got)
+	// the artifact reports the version the build actually used
+	if got := artifact.Dependencies["k6"]; got != pseudo {
+		t.Fatalf("expected k6 version %q in artifact, got %q", pseudo, got)
 	}
 
 	// the foundry receives the bare commit as the build version
@@ -243,14 +250,15 @@ func TestBuildPseudoVersionV2(t *testing.T) {
 	)
 
 	buildsrv, rec := newRecordingBuilder(t, k6ModPath, true)
+	rec.modVersions = map[string]string{k6ModPath: pseudo}
 
 	artifact, err := buildsrv.Build(t.Context(), platform(), k6ModPath, pseudo, []k6build.Dependency{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := artifact.Dependencies["k6"]; got != "v0.0.0+"+commit {
-		t.Fatalf("expected k6 version %q in artifact, got %q", "v0.0.0+"+commit, got)
+	if got := artifact.Dependencies["k6"]; got != pseudo {
+		t.Fatalf("expected k6 version %q in artifact, got %q", pseudo, got)
 	}
 
 	if rec.k6Version != commit {
@@ -261,6 +269,62 @@ func TestBuildPseudoVersionV2(t *testing.T) {
 	// foundry uses the correct import path for the git SHA.
 	if rec.opts.K6MajorVersion != "v2" {
 		t.Fatalf("expected K6MajorVersion %q, got %q", "v2", rec.opts.K6MajorVersion)
+	}
+}
+
+// TestBuildBuildMetadata ensures that when the build reports no version for the
+// module, the v0.0.0+<commit> build-metadata semver is reported as-is while the
+// foundry receives the bare commit.
+func TestBuildBuildMetadata(t *testing.T) {
+	t.Parallel()
+
+	const (
+		buildMeta = "v0.0.0+0c72fa6d4511"
+		commit    = "0c72fa6d4511"
+	)
+
+	buildsrv, rec := newRecordingBuilder(t, defaultK6ModPath, true)
+
+	artifact, err := buildsrv.Build(t.Context(), platform(), defaultK6ModPath, buildMeta, []k6build.Dependency{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := artifact.Dependencies["k6"]; got != buildMeta {
+		t.Fatalf("expected k6 version %q in artifact, got %q", buildMeta, got)
+	}
+
+	if rec.k6Version != commit {
+		t.Fatalf("expected foundry to receive k6 version %q, got %q", commit, rec.k6Version)
+	}
+}
+
+// TestBuildBuildMetadataCanonical ensures a v0.0.0+<commit> build-metadata semver is
+// upgraded to the canonical Go pseudo-version reported by the build (go list -m).
+func TestBuildBuildMetadataCanonical(t *testing.T) {
+	t.Parallel()
+
+	const (
+		buildMeta = "v0.0.0+0c72fa6d4511"
+		commit    = "0c72fa6d4511"
+		canonical = "v1.7.2-0.20260603164357-0c72fa6d4511"
+	)
+
+	buildsrv, rec := newRecordingBuilder(t, defaultK6ModPath, true)
+	// simulate go resolving the commit to its canonical pseudo-version
+	rec.modVersions = map[string]string{defaultK6ModPath: canonical}
+
+	artifact, err := buildsrv.Build(t.Context(), platform(), defaultK6ModPath, buildMeta, []k6build.Dependency{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := artifact.Dependencies["k6"]; got != canonical {
+		t.Fatalf("expected k6 version %q in artifact, got %q", canonical, got)
+	}
+
+	if rec.k6Version != commit {
+		t.Fatalf("expected foundry to receive k6 version %q, got %q", commit, rec.k6Version)
 	}
 }
 

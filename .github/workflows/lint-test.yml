@@ -18,6 +18,6 @@ jobs:
     # keeps working if the org default GITHUB_TOKEN is restricted to read-only.
     permissions:
       contents: read
-    uses: grafana/k6-ci/.github/workflows/all.yml@143ec80c1678ae96a54b82389ea862d4748c27e1 # main
+    uses: grafana/k6-ci/.github/workflows/all.yml@9477260e6838640d56c28aa95bcbf9a884ab21f3 # main
     with:
       skip-extension-testing: true

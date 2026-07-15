@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 )
 
@@ -30,7 +29,7 @@ func New(ctx context.Context) (*s3.Client, func(context.Context), error) {
 		return nil, nil, err
 	}
 
-	mappedPort, err := localstackContainer.MappedPort(ctx, nat.Port("4566/tcp"))
+	mappedPort, err := localstackContainer.MappedPort(ctx, "4566/tcp")
 	if err != nil {
 		return nil, nil, err
 	}

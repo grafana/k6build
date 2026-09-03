@@ -270,6 +270,10 @@ func TestBuildPseudoVersionV2(t *testing.T) {
 	if rec.opts.K6MajorVersion != "v2" {
 		t.Fatalf("expected K6MajorVersion %q, got %q", "v2", rec.opts.K6MajorVersion)
 	}
+
+	if rec.opts.BuildOrigin != "provisioning" {
+		t.Fatalf("expected BuildOrigin %q, got %q", "provisioning", rec.opts.BuildOrigin)
+	}
 }
 
 // TestBuildBuildMetadata ensures that when the build reports no version for the

@@ -1,4 +1,4 @@
-ARG GO_IMAGE=golang:1.26.6-bookworm@sha256:433f9dc4f8ea3a1ce4e28f9f15d0f7c056b10475307f886d6f1ac1ccc4abd976
+ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:6860a573025fcd35aba4f1b23e858b1c1dcd425d53fa73562e169a6ab1c2339a
 FROM ${GO_IMAGE} AS builder
 
 WORKDIR /build

@@ -17,7 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.2
 	github.com/aws/smithy-go v1.27.5
 	github.com/google/go-cmp v0.7.0
-	github.com/grafana/k6foundry v0.5.3-0.20260903154735-9b3d581d3815
+	github.com/grafana/k6foundry v0.5.3
 	github.com/grafana/s3-mock v0.2.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2

@@ -34,6 +34,8 @@ import (
 const (
 	k6DependencyName = "k6"
 
+	buildOrigin = "provisioning"
+
 	opRe    = `(?<operator>[=|~|>|<|\^|>=|<=|!=]){0,1}(?:\s*)`
 	verRe   = `(?P<version>[v|V](?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))`
 	buildRe = `(?:[+|-|])(?P<build>(?:[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))`
@@ -531,6 +533,7 @@ func (b *Builder) buildArtifact(
 			Env:       env,
 			CopyGoEnv: b.opts.CopyGoEnv,
 		},
+		BuildOrigin: buildOrigin,
 	}
 	// Extract the major version suffix from the k6 module path (e.g. "v2" from "go.k6.io/k6/v2")
 	// so k6foundry uses the correct import path when the k6 version is a git SHA.

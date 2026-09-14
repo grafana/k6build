@@ -16,6 +16,9 @@ import (
 	"github.com/grafana/k6build/pkg/api"
 )
 
+// testPlatform is the platform used by tests that don't exercise cross-platform behavior.
+const testPlatform = "linux/amd64"
+
 type mockBuilder struct {
 	err  error
 	deps map[string]string
@@ -98,11 +101,11 @@ func TestBuild(t *testing.T) {
 			builder: mockBuilder{
 				deps: map[string]string{"k6": "v0.1.0"},
 			},
-			req:  &api.BuildRequest{Platform: "linux/amd64", K6Constrains: "v0.1.0"},
+			req:  &api.BuildRequest{Platform: testPlatform, K6Constrains: "v0.1.0"},
 			resp: &api.BuildResponse{},
 			expectReponse: &api.BuildResponse{
 				Artifact: k6build.Artifact{
-					Platform:     "linux/amd64",
+					Platform:     testPlatform,
 					Dependencies: map[string]string{"k6": "v0.1.0"},
 				},
 			},
@@ -114,7 +117,7 @@ func TestBuild(t *testing.T) {
 			builder: mockBuilder{
 				err: k6build.ErrBuildFailed,
 			},
-			req:          &api.BuildRequest{Platform: "linux/amd64", K6Constrains: "v0.1.0"},
+			req:          &api.BuildRequest{Platform: testPlatform, K6Constrains: "v0.1.0"},
 			resp:         &api.BuildResponse{},
 			expectStatus: http.StatusInternalServerError,
 			expectErr:    api.ErrBuildFailed,
@@ -205,11 +208,11 @@ func TestBuildGet(t *testing.T) {
 			builder: mockBuilder{
 				deps: map[string]string{"k6": "v0.1.0"},
 			},
-			params: map[string]string{"platform": "linux/amd64", "k6": "v0.1.0"},
+			params: map[string]string{"platform": testPlatform, "k6": "v0.1.0"},
 			resp:   &api.BuildResponse{},
 			expectReponse: &api.BuildResponse{
 				Artifact: k6build.Artifact{
-					Platform:     "linux/amd64",
+					Platform:     testPlatform,
 					Dependencies: map[string]string{"k6": "v0.1.0"},
 				},
 			},
@@ -221,7 +224,7 @@ func TestBuildGet(t *testing.T) {
 			builder: mockBuilder{
 				err: k6build.ErrBuildFailed,
 			},
-			params:       map[string]string{"platform": "linux/amd64", "k6": "v0.1.0"},
+			params:       map[string]string{"platform": testPlatform, "k6": "v0.1.0"},
 			resp:         &api.BuildResponse{},
 			expectStatus: http.StatusInternalServerError,
 			expectErr:    api.ErrBuildFailed,
@@ -401,7 +404,7 @@ func TestBuildPostNoCache(t *testing.T) {
 			defer apiserver.Close()
 
 			buildReq := api.BuildRequest{
-				Platform:     "linux/amd64",
+				Platform:     testPlatform,
 				K6Constrains: "v0.1.0",
 				NoCache:      tc.noCache,
 			}
@@ -484,7 +487,7 @@ func TestBuildGetNoCache(t *testing.T) {
 			u, _ := url.Parse(apiserver.URL)
 			u = u.JoinPath("build")
 			queryParams := url.Values{}
-			queryParams.Add("platform", "linux/amd64")
+			queryParams.Add("platform", testPlatform)
 			queryParams.Add("k6", "v0.1.0")
 			if tc.nocacheVal != "" {
 				queryParams.Add("nocache", tc.nocacheVal)

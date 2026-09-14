@@ -26,6 +26,9 @@ type object struct {
 	content []byte
 }
 
+// testObjectID is the object id reused across test cases that preload a single existing object.
+const testObjectID = "existing-object"
+
 func setupStore(t *testing.T, preload []object) store.ObjectStore {
 	t.Helper()
 
@@ -79,7 +82,7 @@ func TestPutObject(t *testing.T) {
 
 	preload := []object{
 		{
-			id:      "existing-object",
+			id:      testObjectID,
 			content: []byte("content"),
 		},
 	}
@@ -100,7 +103,7 @@ func TestPutObject(t *testing.T) {
 		},
 		{
 			title:     "put existing object",
-			id:        "existing-object",
+			id:        testObjectID,
 			content:   []byte("new content"),
 			expectErr: store.ErrDuplicateObject,
 		},
@@ -171,7 +174,7 @@ func TestGetObject(t *testing.T) {
 
 	preload := []object{
 		{
-			id:      "existing-object",
+			id:      testObjectID,
 			content: []byte("content"),
 		},
 	}
@@ -187,7 +190,7 @@ func TestGetObject(t *testing.T) {
 	}{
 		{
 			title:     "get existing object",
-			id:        "existing-object",
+			id:        testObjectID,
 			expect:    []byte("content"),
 			expectErr: nil,
 		},

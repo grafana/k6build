@@ -14,6 +14,9 @@ import (
 	"github.com/grafana/k6build/pkg/store/file"
 )
 
+// testCommitSHA is the pseudo-version commit hash reused across test cases below.
+const testCommitSHA = "0c72fa6d4511"
+
 func TestPseudoVersionCommit(t *testing.T) {
 	t.Parallel()
 
@@ -26,22 +29,22 @@ func TestPseudoVersionCommit(t *testing.T) {
 		{
 			title:     "pseudo-version based on a tagged release",
 			constrain: "v1.7.2-0.20260603164357-0c72fa6d4511",
-			expect:    "0c72fa6d4511",
+			expect:    testCommitSHA,
 		},
 		{
 			title:     "pseudo-version with no base version",
 			constrain: "v0.0.0-20260603164357-0c72fa6d4511",
-			expect:    "0c72fa6d4511",
+			expect:    testCommitSHA,
 		},
 		{
 			title:     "pseudo-version based on a pre-release",
 			constrain: "v1.7.2-rc.0.20260603164357-0c72fa6d4511",
-			expect:    "0c72fa6d4511",
+			expect:    testCommitSHA,
 		},
 		{
 			title:     "pseudo-version with a leading = operator",
 			constrain: "=v1.7.2-0.20260603164357-0c72fa6d4511",
-			expect:    "0c72fa6d4511",
+			expect:    testCommitSHA,
 		},
 		{
 			title:     "pseudo-version with a non-exact operator",
@@ -217,7 +220,7 @@ func TestBuildPseudoVersion(t *testing.T) {
 
 	const (
 		pseudo = "v1.7.2-0.20260603164357-0c72fa6d4511"
-		commit = "0c72fa6d4511"
+		commit = testCommitSHA
 	)
 
 	buildsrv, rec := newRecordingBuilder(t, defaultK6ModPath, true)
@@ -245,7 +248,7 @@ func TestBuildPseudoVersionV2(t *testing.T) {
 
 	const (
 		pseudo    = "v2.0.0-0.20260603164357-0c72fa6d4511"
-		commit    = "0c72fa6d4511"
+		commit    = testCommitSHA
 		k6ModPath = "go.k6.io/k6/v2"
 	)
 
@@ -284,7 +287,7 @@ func TestBuildBuildMetadata(t *testing.T) {
 
 	const (
 		buildMeta = "v0.0.0+0c72fa6d4511"
-		commit    = "0c72fa6d4511"
+		commit    = testCommitSHA
 	)
 
 	buildsrv, rec := newRecordingBuilder(t, defaultK6ModPath, true)
@@ -310,7 +313,7 @@ func TestBuildBuildMetadataCanonical(t *testing.T) {
 
 	const (
 		buildMeta = "v0.0.0+0c72fa6d4511"
-		commit    = "0c72fa6d4511"
+		commit    = testCommitSHA
 		canonical = "v1.7.2-0.20260603164357-0c72fa6d4511"
 	)
 

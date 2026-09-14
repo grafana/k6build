@@ -52,7 +52,7 @@ func Download(ctx context.Context, client *http.Client, object store.Object) (io
 			return nil, k6build.NewWrappedError(store.ErrAccessingObject, err)
 		}
 
-		resp, err := client.Do(req) //nolint:gosec
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, k6build.NewWrappedError(store.ErrAccessingObject, err)
 		}

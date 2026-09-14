@@ -20,7 +20,7 @@ func Download(ctx context.Context, url string, output string) error {
 	if err != nil {
 		return fmt.Errorf("%w %w", ErrDownloadFailed, err)
 	}
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("%w %w", ErrDownloadFailed, err)
 	}

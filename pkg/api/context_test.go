@@ -20,12 +20,12 @@ func TestNoCache(t *testing.T) {
 		},
 		{
 			title:    "set to true returns true",
-			setVal:   boolPtr(true),
+			setVal:   boolPtr(true), //nolint:modernize // new(expr) needs go.mod on Go 1.26; see #372/#381
 			expected: true,
 		},
 		{
 			title:    "set to false returns false",
-			setVal:   boolPtr(false),
+			setVal:   boolPtr(false), //nolint:modernize // new(expr) needs go.mod on Go 1.26; see #372/#381
 			expected: false,
 		},
 	}
@@ -46,6 +46,6 @@ func TestNoCache(t *testing.T) {
 	}
 }
 
-func boolPtr(b bool) *bool {
+func boolPtr(b bool) *bool { //nolint:modernize // inlinable to new(expr) once go.mod is on Go 1.26; see #372/#381
 	return &b
 }

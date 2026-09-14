@@ -264,7 +264,7 @@ func shouldRetry(err error, resp *http.Response) bool {
 		}
 
 		var ne net.Error
-		if errors.As(err, &ne) { //nolint:modernize // errors.AsType needs go.mod on Go 1.26; see #372/#381
+		if errors.As(err, &ne) {
 			return ne.Timeout()
 		}
 

@@ -150,7 +150,7 @@ func NewCatalogFromURL(ctx context.Context, catalogURL string) (Catalog, error) 
 		return nil, fmt.Errorf("%w %w", ErrDownload, err)
 	}
 
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w %w", ErrDownload, err)
 	}

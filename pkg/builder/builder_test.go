@@ -75,6 +75,9 @@ func SetupTestBuilder(t *testing.T) (*Builder, error) {
 // defaultK6ModPath is a convenience for tests that don't care about v2 routing.
 const defaultK6ModPath = k6build.K6ModPath
 
+// testPlatform is the platform used by tests that don't exercise cross-platform behavior.
+const testPlatform = "linux/amd64"
+
 func platform() string {
 	return fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
 }
@@ -242,7 +245,7 @@ func TestIdempotentBuild(t *testing.T) {
 
 	artifact, err := buildsrv.Build(
 		context.TODO(),
-		"linux/amd64",
+		testPlatform,
 		defaultK6ModPath,
 		"v0.1.0",
 		[]k6build.Dependency{
@@ -265,7 +268,7 @@ func TestIdempotentBuild(t *testing.T) {
 		}{
 			{
 				title:    "same dependencies",
-				platform: "linux/amd64",
+				platform: testPlatform,
 				k6:       "v0.1.0",
 				deps: []k6build.Dependency{
 					{Name: "k6/x/ext", Constraints: "v0.1.0"},
@@ -274,7 +277,7 @@ func TestIdempotentBuild(t *testing.T) {
 			},
 			{
 				title:    "different order of dependencies",
-				platform: "linux/amd64",
+				platform: testPlatform,
 				k6:       "v0.1.0",
 				deps: []k6build.Dependency{
 					{Name: "k6/x/ext2", Constraints: "v0.1.0"},
@@ -321,7 +324,7 @@ func TestIdempotentBuild(t *testing.T) {
 		}{
 			{
 				title:    "different k6 versions",
-				platform: "linux/amd64",
+				platform: testPlatform,
 				k6:       "v0.2.0",
 				deps: []k6build.Dependency{
 					{Name: "k6/x/ext", Constraints: "v0.1.0"},
@@ -330,7 +333,7 @@ func TestIdempotentBuild(t *testing.T) {
 			},
 			{
 				title:    "different dependency versions",
-				platform: "linux/amd64",
+				platform: testPlatform,
 				k6:       "v0.1.0",
 				deps: []k6build.Dependency{
 					{Name: "k6/x/ext", Constraints: "v0.2.0"},
@@ -339,7 +342,7 @@ func TestIdempotentBuild(t *testing.T) {
 			},
 			{
 				title:    "different dependencies",
-				platform: "linux/amd64",
+				platform: testPlatform,
 				k6:       "v0.1.0",
 				deps: []k6build.Dependency{
 					{Name: "k6/x/ext", Constraints: "v0.1.0"},
@@ -399,13 +402,13 @@ func TestCatalogSelection(t *testing.T) {
 			title:        "wildcard routes to v1 catalog",
 			k6Constraint: "*",
 			expectK6Ver:  "v0.57.0",
-			expectK6Path: "go.k6.io/k6",
+			expectK6Path: defaultK6ModPath,
 		},
 		{
 			title:        "v1 exact version routes to v1 catalog",
 			k6Constraint: "v0.57.0",
 			expectK6Ver:  "v0.57.0",
-			expectK6Path: "go.k6.io/k6",
+			expectK6Path: defaultK6ModPath,
 		},
 	}
 
@@ -487,8 +490,8 @@ func TestBuildK6ModPath(t *testing.T) {
 		{
 			title:        "k6ModPath is propagated to artifact",
 			k6Constraint: "v0.1.0",
-			k6ModPath:    "go.k6.io/k6",
-			expectPath:   "go.k6.io/k6",
+			k6ModPath:    defaultK6ModPath,
+			expectPath:   defaultK6ModPath,
 		},
 		{
 			title:        "empty k6ModPath results in empty artifact field",
@@ -618,7 +621,7 @@ func TestConcurrentBuilds(t *testing.T) {
 		wg.Go(func() {
 			if _, err := buildsrv.Build(
 				context.TODO(),
-				"linux/amd64",
+				testPlatform,
 				defaultK6ModPath,
 				b.k6Ver,
 				b.deps,
@@ -637,25 +640,33 @@ func TestConcurrentBuilds(t *testing.T) {
 	}
 }
 
+// metric names asserted by TestMetrics.
+const (
+	metricRequestsTotal      = "k6build_requests_total"
+	metricBuildsTotal        = "k6build_builds_total"
+	metricBuildsFailedTotal  = "k6build_builds_failed_total"
+	metricBuildsInvalidTotal = "k6build_builds_invalid_total"
+)
+
 func TestMetrics(t *testing.T) {
 	t.Parallel()
 
 	// templates for producing metric text output
 	metricTemplates := map[string]string{
-		"k6build_requests_total": `
+		metricRequestsTotal: `
 # HELP k6build_requests_total The total number of builds requests
 # TYPE k6build_requests_total counter
 k6build_requests_total %s`,
-		"k6build_builds_total": `
+		metricBuildsTotal: `
 # HELP k6build_builds_total The total number of builds
 # HELP k6build_builds_total
 # TYPE k6build_builds_total counter
 k6build_builds_total %s`,
-		"k6build_builds_failed_total": `
+		metricBuildsFailedTotal: `
 # HELP k6build_builds_failed_total The total number of failed builds
 # TYPE k6build_builds_failed_total counter
 k6build_builds_failed_total %s`,
-		"k6build_builds_invalid_total": `
+		metricBuildsInvalidTotal: `
 # HELP k6build_builds_invalid_total The total number of builds with invalid parameters
 # TYPE k6build_builds_invalid_total counter
 k6build_builds_invalid_total %s`,
@@ -670,40 +681,40 @@ k6build_builds_invalid_total %s`,
 			title:    "single build",
 			requests: []string{"v0.2.0"},
 			expected: map[string]string{
-				"k6build_requests_total":       "1",
-				"k6build_builds_total":         "1",
-				"k6build_builds_invalid_total": "0",
-				"k6build_builds_failed_total":  "0",
+				metricRequestsTotal:      "1",
+				metricBuildsTotal:        "1",
+				metricBuildsInvalidTotal: "0",
+				metricBuildsFailedTotal:  "0",
 			},
 		},
 		{
 			title:    "unsatisfied build",
 			requests: []string{"v0.3.0"},
 			expected: map[string]string{
-				"k6build_requests_total":       "1",
-				"k6build_builds_total":         "0",
-				"k6build_builds_invalid_total": "1",
-				"k6build_builds_failed_total":  "0",
+				metricRequestsTotal:      "1",
+				metricBuildsTotal:        "0",
+				metricBuildsInvalidTotal: "1",
+				metricBuildsFailedTotal:  "0",
 			},
 		},
 		{
 			title:    "multiple builds same versions",
 			requests: []string{"v0.2.0", "v0.2.0"},
 			expected: map[string]string{
-				"k6build_requests_total":       "2",
-				"k6build_builds_total":         "1",
-				"k6build_builds_invalid_total": "0",
-				"k6build_builds_failed_total":  "0",
+				metricRequestsTotal:      "2",
+				metricBuildsTotal:        "1",
+				metricBuildsInvalidTotal: "0",
+				metricBuildsFailedTotal:  "0",
 			},
 		},
 		{
 			title:    "multiple builds different versions",
 			requests: []string{"v0.2.0", "v0.1.0"},
 			expected: map[string]string{
-				"k6build_requests_total":       "2",
-				"k6build_builds_total":         "2",
-				"k6build_builds_invalid_total": "0",
-				"k6build_builds_failed_total":  "0",
+				metricRequestsTotal:      "2",
+				metricBuildsTotal:        "2",
+				metricBuildsInvalidTotal: "0",
+				metricBuildsFailedTotal:  "0",
 			},
 		},
 	}
@@ -733,7 +744,7 @@ k6build_builds_invalid_total %s`,
 			for _, k6 := range tc.requests {
 				_, err = builder.Build(
 					context.TODO(),
-					"linux/amd64",
+					testPlatform,
 					defaultK6ModPath,
 					k6,
 					[]k6build.Dependency{},

@@ -108,7 +108,7 @@ func New() *cobra.Command { //nolint:funlen
 			if err != nil {
 				return fmt.Errorf("malformed URL %w", err)
 			}
-			artifactBinary, err := os.Open(binaryURL.Path) //nolint:gosec,forbidigo
+			artifactBinary, err := os.Open(binaryURL.Path) //nolint:forbidigo
 			if err != nil {
 				return fmt.Errorf("opening output file %w", err)
 			}

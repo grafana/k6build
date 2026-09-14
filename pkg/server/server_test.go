@@ -556,7 +556,7 @@ func extractError(s any) error {
 		return nil
 	}
 
-	err, ok := errField.Interface().(error) //nolint:modernize // reflect.TypeAssert needs go.mod on Go 1.26; see #372/#381
+	err, ok := reflect.TypeAssert[error](errField)
 	if !ok {
 		return nil
 	}

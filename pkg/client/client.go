@@ -263,8 +263,7 @@ func shouldRetry(err error, resp *http.Response) bool {
 			return true
 		}
 
-		var ne net.Error
-		if errors.As(err, &ne) {
+		if ne, ok := errors.AsType[net.Error](err); ok {
 			return ne.Timeout()
 		}
 

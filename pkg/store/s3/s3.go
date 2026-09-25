@@ -174,22 +174,19 @@ func (s *Store) Put(ctx context.Context, id string, content io.Reader) (store.Ob
 
 // Get retrieves an objects if exists in the object store or an error otherwise
 func (s *Store) Get(ctx context.Context, id string) (store.Object, error) {
-	var obj *s3.GetObjectAttributesOutput
-	err := s3client.WithRetry(ctx, s.callTimeout, s.callRetries, s.callBackoff, func(callCtx context.Context) error {
-		var getErr error
-		obj, getErr = s.client.GetObjectAttributes(
-			callCtx,
-			&s3.GetObjectAttributesInput{
-				Bucket: aws.String(s.bucket),
-				Key:    aws.String(id),
-				ObjectAttributes: []types.ObjectAttributes{
-					types.ObjectAttributesChecksum,
-					types.ObjectAttributesEtag,
-				},
+	obj, err := s.client.GetObjectAttributes(
+		ctx,
+		&s3.GetObjectAttributesInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(id),
+			ObjectAttributes: []types.ObjectAttributes{
+				types.ObjectAttributesChecksum,
+				types.ObjectAttributesEtag,
 			},
-		)
-		return getErr
-	})
+		},
+		s3client.WithCallTimeout(s.callTimeout),
+		s3client.WithCallRetries(s.callRetries, s.callBackoff),
+	)
 	if err != nil {
 		// check for object not found
 		var aerr smithy.APIError

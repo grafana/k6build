@@ -311,11 +311,28 @@ func newRawS3TestClient(t *testing.T, srvURL string) *s3.Client {
 func TestGet_BoundsEachAttemptToCallTimeout(t *testing.T) {
 	t.Parallel()
 
+	const (
+		callTimeout = 20 * time.Millisecond
+		// serverStall is far longer than callTimeout so that, if it is ever
+		// observed by an attempt's duration below, the per-attempt timeout was
+		// not actually enforced.
+		serverStall = 300 * time.Millisecond
+	)
+
 	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// attemptDurations reports how long the server observed each attempt's
+	// request context stay alive: it unblocks either when that context is
+	// canceled (the per-attempt timeout firing) or when serverStall elapses,
+	// whichever comes first.
+	attemptDurations := make(chan time.Duration, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		// stall far longer than CallTimeout below, on every attempt
-		time.Sleep(300 * time.Millisecond)
+		start := time.Now()
+		select {
+		case <-r.Context().Done():
+		case <-time.After(serverStall):
+		}
+		attemptDurations <- time.Since(start)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
@@ -323,7 +340,7 @@ func TestGet_BoundsEachAttemptToCallTimeout(t *testing.T) {
 	s, err := New(Config{
 		Client:      newRawS3TestClient(t, srv.URL),
 		Bucket:      "test-bucket",
-		CallTimeout: 20 * time.Millisecond,
+		CallTimeout: callTimeout,
 		CallRetries: aws.Int(1),
 		CallBackoff: 5 * time.Millisecond,
 	})
@@ -331,9 +348,7 @@ func TestGet_BoundsEachAttemptToCallTimeout(t *testing.T) {
 		t.Fatalf("creating store %v", err)
 	}
 
-	start := time.Now()
 	_, err = s.Get(t.Context(), "some-key")
-	elapsed := time.Since(start)
 
 	if err == nil {
 		t.Fatalf("expected an error, got nil")
@@ -341,11 +356,16 @@ func TestGet_BoundsEachAttemptToCallTimeout(t *testing.T) {
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("expected 2 attempts (1 + 1 retry), got %d", got)
 	}
-	// Each attempt is capped at 20ms, plus one 5ms backoff: ~45ms total.
-	// The server actually stalls for 300ms per request, so this only holds
-	// if the per-attempt timeout is genuinely being enforced.
-	if elapsed > 200*time.Millisecond {
-		t.Fatalf("expected Get to give up well under the server's 300ms stall, took %v", elapsed)
+	// A generous margin over callTimeout for scheduling jitter, but still far
+	// below serverStall: each attempt must be bounded by its own per-attempt
+	// timeout, not by the server eventually giving up.
+	const maxAttemptDuration = callTimeout + 100*time.Millisecond
+	for i := 0; i < 2; i++ {
+		d := <-attemptDurations
+		if d > maxAttemptDuration {
+			t.Fatalf("attempt %d took %v, expected it to be bounded by the %v call timeout (server stalls for %v)",
+				i+1, d, callTimeout, serverStall)
+		}
 	}
 }
 

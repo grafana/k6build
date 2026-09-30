@@ -126,8 +126,7 @@ func tagPerAttemptTimeout(parentCtx, attemptCtx context.Context, err error) erro
 type perAttemptTimeoutRetryable struct{}
 
 func (perAttemptTimeoutRetryable) IsErrorRetryable(err error) aws.Ternary {
-	var timeoutErr *perAttemptTimeoutError
-	if errors.As(err, &timeoutErr) {
+	if _, ok := errors.AsType[*perAttemptTimeoutError](err); ok {
 		return aws.TrueTernary
 	}
 	return aws.UnknownTernary

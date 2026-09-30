@@ -38,7 +38,7 @@ func headBucket(t *testing.T, client *s3.Client, opts ...func(*s3.Options)) erro
 	return err
 }
 
-func headBucketWithContext(t *testing.T, ctx context.Context, client *s3.Client, opts ...func(*s3.Options)) error {
+func headBucketWithContext(ctx context.Context, t *testing.T, client *s3.Client, opts ...func(*s3.Options)) error {
 	t.Helper()
 
 	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String("bucket")}, opts...)
@@ -164,7 +164,7 @@ func TestWithCallTimeout_DoesNotRetryOnCallerContextExpiry(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := headBucketWithContext(t, ctx, client, WithCallTimeout(time.Second), WithCallRetries(3, time.Millisecond))
+	err := headBucketWithContext(ctx, t, client, WithCallTimeout(time.Second), WithCallRetries(3, time.Millisecond))
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -191,8 +191,7 @@ func TestTagPerAttemptTimeout_TagsOwnDeadline(t *testing.T) {
 
 	err := tagPerAttemptTimeout(parentCtx, attemptCtx, errors.New("boom"))
 
-	var timeoutErr *perAttemptTimeoutError
-	if !errors.As(err, &timeoutErr) {
+	if _, ok := errors.AsType[*perAttemptTimeoutError](err); !ok {
 		t.Fatalf("expected a *perAttemptTimeoutError, got %v (%T)", err, err)
 	}
 }
@@ -215,8 +214,7 @@ func TestTagPerAttemptTimeout_DoesNotTagCallerDeadline(t *testing.T) {
 
 	err := tagPerAttemptTimeout(parentCtx, attemptCtx, errors.New("boom"))
 
-	var timeoutErr *perAttemptTimeoutError
-	if errors.As(err, &timeoutErr) {
+	if _, ok := errors.AsType[*perAttemptTimeoutError](err); ok {
 		t.Fatalf("expected the caller's own deadline expiring not to be tagged as our per-attempt timeout, got %v", err)
 	}
 }
@@ -232,8 +230,7 @@ func TestTagPerAttemptTimeout_DoesNotTagCallerCancellation(t *testing.T) {
 
 	err := tagPerAttemptTimeout(parentCtx, attemptCtx, errors.New("boom"))
 
-	var timeoutErr *perAttemptTimeoutError
-	if errors.As(err, &timeoutErr) {
+	if _, ok := errors.AsType[*perAttemptTimeoutError](err); ok {
 		t.Fatalf("expected caller cancellation not to be tagged as our per-attempt timeout, got %v", err)
 	}
 }

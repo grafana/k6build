@@ -360,7 +360,7 @@ func TestGet_BoundsEachAttemptToCallTimeout(t *testing.T) {
 	// below serverStall: each attempt must be bounded by its own per-attempt
 	// timeout, not by the server eventually giving up.
 	const maxAttemptDuration = callTimeout + 100*time.Millisecond
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		d := <-attemptDurations
 		if d > maxAttemptDuration {
 			t.Fatalf("attempt %d took %v, expected it to be bounded by the %v call timeout (server stalls for %v)",

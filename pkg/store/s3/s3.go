@@ -28,9 +28,12 @@ const DefaultURLExpiration = time.Hour * 24
 
 // Store a ObjectStore backed by a S3 bucket
 type Store struct {
-	bucket     string
-	client     *s3.Client
-	expiration time.Duration
+	bucket      string
+	client      *s3.Client
+	expiration  time.Duration
+	callTimeout time.Duration
+	callRetries int
+	callBackoff time.Duration
 }
 
 // Config S3 Store configuration
@@ -44,6 +47,18 @@ type Config struct {
 	Bucket string
 	// Expiration for the presigned download URLs
 	URLExpiration time.Duration
+	// CallTimeout bounds the cache-check call (GetObjectAttributes) issued by Get, so
+	// a stalled connection can't silently consume the caller's entire context budget.
+	// Does not apply to Put. Defaults to s3client.DefaultCallTimeout. Must not be negative.
+	CallTimeout time.Duration
+	// CallRetries number of retries for Get's cache-check call if it times out or hits
+	// a network-level error. Does not apply to Put. nil defaults to
+	// s3client.DefaultCallRetries; a pointer to 0 explicitly disables retries.
+	// Must not point to a negative value.
+	CallRetries *int
+	// CallBackoff wait between retries of Get's cache-check call. Does not apply to
+	// Put. Defaults to s3client.DefaultCallBackoff. Must not be negative.
+	CallBackoff time.Duration
 }
 
 // WithExpiration sets the expiration for the presigned URL
@@ -76,10 +91,39 @@ func New(conf Config) (store.ObjectStore, error) {
 	if expiration == 0 {
 		expiration = DefaultURLExpiration
 	}
+
+	if conf.CallTimeout < 0 {
+		return nil, fmt.Errorf("%w: call timeout cannot be negative", store.ErrInitializingStore)
+	}
+	if conf.CallRetries != nil && *conf.CallRetries < 0 {
+		return nil, fmt.Errorf("%w: call retries cannot be negative", store.ErrInitializingStore)
+	}
+	if conf.CallBackoff < 0 {
+		return nil, fmt.Errorf("%w: call backoff cannot be negative", store.ErrInitializingStore)
+	}
+
+	callTimeout := conf.CallTimeout
+	if callTimeout == 0 {
+		callTimeout = s3client.DefaultCallTimeout
+	}
+
+	callRetries := s3client.DefaultCallRetries
+	if conf.CallRetries != nil {
+		callRetries = *conf.CallRetries
+	}
+
+	callBackoff := conf.CallBackoff
+	if callBackoff == 0 {
+		callBackoff = s3client.DefaultCallBackoff
+	}
+
 	return &Store{
-		client:     client,
-		bucket:     conf.Bucket,
-		expiration: expiration,
+		client:      client,
+		bucket:      conf.Bucket,
+		expiration:  expiration,
+		callTimeout: callTimeout,
+		callRetries: callRetries,
+		callBackoff: callBackoff,
 	}, nil
 }
 
@@ -130,17 +174,22 @@ func (s *Store) Put(ctx context.Context, id string, content io.Reader) (store.Ob
 
 // Get retrieves an objects if exists in the object store or an error otherwise
 func (s *Store) Get(ctx context.Context, id string) (store.Object, error) {
-	obj, err := s.client.GetObjectAttributes(
-		ctx,
-		&s3.GetObjectAttributesInput{
-			Bucket: aws.String(s.bucket),
-			Key:    aws.String(id),
-			ObjectAttributes: []types.ObjectAttributes{
-				types.ObjectAttributesChecksum,
-				types.ObjectAttributesEtag,
+	var obj *s3.GetObjectAttributesOutput
+	err := s3client.WithRetry(ctx, s.callTimeout, s.callRetries, s.callBackoff, func(callCtx context.Context) error {
+		var getErr error
+		obj, getErr = s.client.GetObjectAttributes(
+			callCtx,
+			&s3.GetObjectAttributesInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(id),
+				ObjectAttributes: []types.ObjectAttributes{
+					types.ObjectAttributesChecksum,
+					types.ObjectAttributesEtag,
+				},
 			},
-		},
-	)
+		)
+		return getErr
+	})
 	if err != nil {
 		// check for object not found
 		var aerr smithy.APIError

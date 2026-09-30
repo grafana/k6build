@@ -42,11 +42,12 @@ func WithCallTimeout(timeout time.Duration) func(*s3.Options) {
 			return stack.Finalize.Insert(
 				middleware.FinalizeMiddlewareFunc(perAttemptTimeoutMiddlewareID,
 					func(
-						ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler,
+						parentCtx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler,
 					) (middleware.FinalizeOutput, middleware.Metadata, error) {
-						ctx, cancel := context.WithTimeout(ctx, timeout)
+						attemptCtx, cancel := context.WithTimeout(parentCtx, timeout)
 						defer cancel()
-						return next.HandleFinalize(ctx, in)
+						out, meta, err := next.HandleFinalize(attemptCtx, in)
+						return out, meta, tagPerAttemptTimeout(parentCtx, attemptCtx, err)
 					},
 				),
 				"Retry",
@@ -80,6 +81,33 @@ func WithCallRetries(retries int, backoff time.Duration) func(*s3.Options) {
 	}
 }
 
+// perAttemptTimeoutError tags an error as having occurred because
+// WithCallTimeout's own per-attempt deadline elapsed, as opposed to the
+// caller's outer context. WithCallTimeout applies this tag itself, right
+// where it derives the per-attempt context, since that is the only place
+// able to tell the two apart: both produce a context reporting
+// context.DeadlineExceeded (a child context propagates its parent's Err(),
+// deadline or not), so matching on the error alone downstream cannot
+// distinguish "this attempt's own timeout fired" from "the caller's overall
+// deadline expired".
+type perAttemptTimeoutError struct{ err error }
+
+func (e *perAttemptTimeoutError) Error() string { return e.err.Error() }
+func (e *perAttemptTimeoutError) Unwrap() error { return e.err }
+
+// tagPerAttemptTimeout wraps err in a perAttemptTimeoutError if attemptCtx (a
+// context.WithTimeout child of parentCtx) ended because attemptCtx's own
+// deadline elapsed, as opposed to parentCtx ending. attemptCtx can only
+// report DeadlineExceeded here if either its own timer fired or parentCtx
+// did; parentCtx.Err() being nil at this point (checked immediately, before
+// it has a chance to expire on its own) means it was ours, not the caller's.
+func tagPerAttemptTimeout(parentCtx, attemptCtx context.Context, err error) error {
+	if err != nil && parentCtx.Err() == nil && errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
+		return &perAttemptTimeoutError{err: err}
+	}
+	return err
+}
+
 // perAttemptTimeoutRetryable reclassifies our own WithCallTimeout expiring as
 // retryable. The SDK's HTTP client layer treats any request error observed
 // after its context is done as a canceled request (smithy.CanceledError, which
@@ -90,16 +118,16 @@ func WithCallRetries(retries int, backoff time.Duration) func(*s3.Options) {
 // attempt looks the same to the SDK as the caller canceling the whole
 // operation, unless we tell it otherwise here.
 //
-// errors.Is(err, context.DeadlineExceeded) only matches when this specific
-// attempt's own deadline elapsed, not when the caller's outer context was
-// canceled: canceling a parent context makes a derived context.WithTimeout's
-// Err() report context.Canceled, not context.DeadlineExceeded. So a genuine
-// caller-initiated cancellation still falls through (UnknownTernary) to the
-// default "don't retry cancellations" behavior.
+// This only matches errors WithCallTimeout has tagged as its own per-attempt
+// timeout expiring (see perAttemptTimeoutError), not the caller's outer
+// context ending: a genuine caller-initiated cancellation or the caller's own
+// deadline expiring still falls through (UnknownTernary) to the default
+// "don't retry cancellations" behavior.
 type perAttemptTimeoutRetryable struct{}
 
 func (perAttemptTimeoutRetryable) IsErrorRetryable(err error) aws.Ternary {
-	if errors.Is(err, context.DeadlineExceeded) {
+	var timeoutErr *perAttemptTimeoutError
+	if errors.As(err, &timeoutErr) {
 		return aws.TrueTernary
 	}
 	return aws.UnknownTernary

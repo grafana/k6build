@@ -19,7 +19,7 @@ func Update(root *cobra.Command, filename string, headingOffset int) error {
 
 	filename = filepath.Clean(filename)
 
-	src, err := os.ReadFile(filename) //nolint:forbidigo
+	src, err := os.ReadFile(filename) //nolint:forbidigo,gosec // G703: path is supplied by the developer running gendoc
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,7 @@ module github.com/grafana/k6build
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 retract (
 	v0.5.7 // corrupted cache

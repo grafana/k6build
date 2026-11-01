@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
-	github.com/aws/smithy-go v1.28.2
+	github.com/aws/smithy-go v1.28.7
 	github.com/google/go-cmp v0.7.0
 	github.com/grafana/k6foundry v0.5.3
 	github.com/grafana/s3-mock v0.2.0

@@ -1,5 +1,5 @@
-# Image generated on 2026-10-08
-ARG GO_IMAGE=golang:1.27.3-trixie@sha256:c65ecfe613b539ac74c62a4c3b2c27e8f8a6076384c8f27e8a3c0f3be17cc385
+# Image generated on 2026-11-05
+ARG GO_IMAGE=golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80
 FROM ${GO_IMAGE} AS builder
 
 WORKDIR /build
